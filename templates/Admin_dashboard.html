@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CampusFix — Admin Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green-950:#051810;--green-900:#0b3d2b;--green-800:#0e4d36;--green-700:#13603f;--green-600:#1a7a4f;
+    --saffron:#e08a1e;--saffron-dark:#c56f0f;--saffron-lt:#f2b45a;
+    --cream:#f6f4ec;--paper:#ffffff;--field:#fbfaf6;--chip:#f1efe6;--topbar:rgba(246,244,236,.88);
+    --ink:#0f221a;--ink-soft:#5b6b63;--body:#33463d;--line:#e4e1d4;--brand:#0b3d2b;
+    --ok:#189a56;--ok-lt:#e6f6ec;--warn:#c98a10;--warn-lt:#fdf3dc;--err:#c4372f;--err-lt:#fdecea;--info:#2b6cb0;--info-lt:#e8f0fb;
+    --ff-head:'Plus Jakarta Sans',sans-serif;--ff-body:'Inter',sans-serif;--ff-mono:'JetBrains Mono',monospace;
+    --shadow:0 24px 50px -30px rgba(11,61,43,.5);
+  }
+  :root[data-theme=dark]{
+    --cream:#0a1510;--paper:#122019;--field:#0e1b15;--chip:#1b2f25;--topbar:rgba(10,21,16,.88);
+    --ink:#eaf2ed;--ink-soft:#8ea698;--body:#c3d3ca;--line:#22352b;--brand:#22935f;
+    --ok-lt:#12331f;--warn-lt:#3a2e12;--err-lt:#3a1a17;--info-lt:#152944;
+    --shadow:0 24px 50px -30px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{font-family:var(--ff-body);background:var(--cream);color:var(--ink);min-height:100vh;overflow-x:hidden;transition:background .4s ease,color .4s ease;}
+  button{font-family:inherit;color:inherit;position:relative;overflow:hidden;cursor:pointer;}
+  svg{flex:none;}
+  .ic{stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+  .ripple{position:absolute;border-radius:50%;background:currentColor;opacity:.18;transform:scale(0);animation:rip .6s ease-out;pointer-events:none;}
+  @keyframes rip{to{transform:scale(2.8);opacity:0;}}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @keyframes pop{0%{transform:scale(.55);}60%{transform:scale(1.18);}100%{transform:scale(1);}}
+  @keyframes blink{50%{opacity:.25;}}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;}
+
+  /* ---------- TOPBAR ---------- */
+  .topbar{position:sticky;top:0;z-index:30;background:var(--topbar);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;animation:dropIn .6s cubic-bezier(.2,.8,.2,1);}
+  @keyframes dropIn{from{transform:translateY(-100%);}to{transform:none;}}
+  .icon-btn{width:42px;height:42px;border-radius:13px;border:1.5px solid var(--line);background:var(--paper);flex:none;display:flex;align-items:center;justify-content:center;transition:border-color .2s ease,transform .2s ease;}
+  .icon-btn:hover{border-color:var(--brand);transform:translateY(-1px);}
+  .icon-btn:active{transform:scale(.94);}
+  .icon-btn svg{width:20px;height:20px;}
+  .burger{flex-direction:column;gap:5px;}
+  .burger span{display:block;width:18px;height:2px;background:var(--ink);border-radius:2px;transition:transform .4s cubic-bezier(.34,1.56,.64,1),opacity .2s ease,width .3s ease;}
+  .burger span:nth-child(2){width:12px;align-self:flex-start;margin-left:12px;}
+  .burger.open span:nth-child(1){transform:translateY(7px) rotate(45deg);}
+  .burger.open span:nth-child(2){opacity:0;width:18px;}
+  .burger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg);}
+  .top-title{flex:1;min-width:0;}
+  .top-title b{display:block;font-family:var(--ff-head);font-weight:800;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .top-title small{display:block;font-size:11px;color:var(--ink-soft);margin-top:1px;}
+  .top-logo{height:50px;width:auto;max-width:90px;object-fit:contain;flex:none;background:none;border:none;padding:0;border-radius:0;}
+  .bell{position:relative;}
+  .bell-wrap{position:relative;flex:none;display:inline-flex;}
+  .bell.ring svg{animation:ring 2.6s ease-in-out infinite;transform-origin:50% 10%;}
+  @keyframes ring{0%,88%,100%{transform:rotate(0);}90%{transform:rotate(14deg);}92%{transform:rotate(-12deg);}94%{transform:rotate(9deg);}96%{transform:rotate(-6deg);}}
+  .nbadge{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;border-radius:10px;background:var(--err);color:#fff;font:800 10px var(--ff-body);display:none;align-items:center;justify-content:center;border:2px solid var(--cream);z-index:2;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.25);}
+  .notif-panel{position:fixed;top:calc(64px + env(safe-area-inset-top));right:12px;width:min(370px,calc(100vw - 24px));max-height:72vh;display:flex;flex-direction:column;background:var(--paper);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 60px -20px rgba(0,0,0,.45);z-index:36;opacity:0;transform:translateY(-8px) scale(.98);transform-origin:top right;pointer-events:none;transition:opacity .22s ease,transform .3s cubic-bezier(.2,.8,.2,1);}
+  .notif-panel.show{opacity:1;transform:none;pointer-events:auto;}
+  .np-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);}
+  .np-head b{font-family:var(--ff-head);font-size:15px;font-weight:800;}
+  .np-head button{border:none;background:none;color:var(--brand);font-weight:700;font-size:12px;}
+  .np-list{overflow-y:auto;padding:6px;}
+  .ni{display:flex;gap:11px;width:100%;text-align:left;border:none;background:transparent;padding:11px 10px;border-radius:14px;align-items:flex-start;}
+  .ni:hover{background:var(--chip);}
+  .ni.unread{background:var(--chip);}
+  .nic{width:34px;height:34px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;}
+  .nic svg{width:17px;height:17px;}
+  .nic.new{background:var(--green-700);} .nic.od{background:var(--err);} .nic.pri{background:var(--saffron);} .nic.ok{background:var(--ok);}
+  .nt{min-width:0;display:flex;flex-direction:column;gap:2px;flex:1;}
+  .nt b{font-size:13px;}
+  .nt span{font-size:12.5px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .nt small{font-size:11px;color:var(--ink-soft);}
+  .ni.unread .nt b::after{content:'';display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--err);margin-left:6px;vertical-align:1px;}
+  .n-empty{padding:34px 16px;text-align:center;color:var(--ink-soft);font-size:13px;font-weight:600;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:5px;animation:blink 1.8s ease-in-out infinite;vertical-align:1px;}
+
+  /* ---------- DRAWER ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(3,16,11,.55);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s ease;z-index:40;}
+  .scrim.show{opacity:1;pointer-events:auto;}
+  .drawer{position:fixed;top:0;left:0;bottom:0;width:min(320px,88vw);background:var(--paper);z-index:50;overflow-y:auto;transform:translateX(-104%);transition:transform .5s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:24px 0 60px -24px rgba(0,0,0,.5);}
+  .drawer.open{transform:translateX(0);}
+  .drawer{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+  .drawer>*{flex-shrink:0;}
+  .drawer-head{position:relative;padding:calc(24px + env(safe-area-inset-top)) 20px 18px;color:#fff;overflow:hidden;background:radial-gradient(circle at 85% 0%,rgba(224,138,30,.45),transparent 50%),linear-gradient(160deg,var(--green-950),var(--green-800));}
+  .drawer-head::before{content:'';position:absolute;width:150px;height:150px;right:-50px;top:20px;border-radius:50%;background:#fff;opacity:.06;animation:drift 9s ease-in-out infinite;}
+  @keyframes drift{0%,100%{transform:translate(0,0);}50%{transform:translate(-12px,14px);}}
+  .av-wrap{position:relative;display:block;width:66px;height:66px;border:none;background:none;padding:0;cursor:pointer;border-radius:50%;margin-bottom:11px;z-index:1;}
+  .av{width:100%;height:100%;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,var(--saffron),var(--saffron-lt));color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-weight:800;font-size:24px;border:3px solid rgba(255,255,255,.9);}
+  .av img{width:100%;height:100%;object-fit:cover;display:block;}
+  .uname{position:relative;z-index:1;font-family:var(--ff-head);font-weight:800;font-size:17px;line-height:1.2;}
+  .urole{position:relative;z-index:1;font-size:12px;color:#d3e6da;margin-top:2px;}
+  .udept{position:relative;z-index:1;display:inline-block;margin-top:9px;font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);}
+  .nav{padding:10px 12px 4px;display:flex;flex-direction:column;gap:2px;}
+  .nb{display:flex;align-items:center;gap:13px;width:100%;border:none;background:transparent;padding:11px 13px;border-radius:12px;font-size:14px;font-weight:600;color:var(--ink);text-align:left;opacity:0;transform:translateX(-16px);transition:background .2s ease,color .2s ease;}
+  .drawer.open .nb{animation:navIn .5s cubic-bezier(.2,.8,.2,1) forwards;}
+  .drawer.open .nb:nth-child(1){animation-delay:.08s;}.drawer.open .nb:nth-child(2){animation-delay:.12s;}
+  .drawer.open .nb:nth-child(3){animation-delay:.16s;}.drawer.open .nb:nth-child(4){animation-delay:.2s;}
+  .drawer.open .nb:nth-child(5){animation-delay:.24s;}
+  @keyframes navIn{to{opacity:1;transform:translateX(0);}}
+  .nb svg{width:19px;height:19px;}
+  .nb:hover{background:var(--chip);}
+  .nb.active{background:var(--brand);color:#fff;}
+  .nb .count{margin-left:auto;min-width:19px;height:19px;padding:0 6px;border-radius:10px;background:var(--saffron);color:#fff;font-size:10.5px;font-weight:800;display:none;align-items:center;justify-content:center;}
+  .nb .count.show{display:flex;}
+  .nav-sep{height:1px;background:var(--line);margin:8px 16px;}
+  .nav-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;color:var(--ink-soft);text-transform:uppercase;padding:8px 16px 4px;}
+  .drawer-foot{padding:10px 12px calc(18px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:flex;flex-direction:column;gap:9px;margin-top:auto;}
+  .theme-row{display:flex;align-items:center;gap:12px;padding:8px 13px;font-size:13.5px;font-weight:600;border:none;background:none;width:100%;border-radius:12px;}
+  .theme-row:hover{background:var(--chip);}
+  .switch{margin-left:auto;width:42px;height:25px;border-radius:13px;background:var(--line);position:relative;transition:background .3s ease;flex:none;}
+  .switch::after{content:'';position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:transform .35s cubic-bezier(.34,1.56,.64,1);}
+  [data-theme=dark] .switch{background:var(--brand);}
+  [data-theme=dark] .switch::after{transform:translateX(17px);}
+  .logout-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:12px;border-radius:13px;border:1.5px solid #f0c9c5;background:var(--err-lt);color:var(--err);font-weight:700;font-size:13.5px;transition:transform .2s ease;}
+  .logout-btn:hover{transform:translateY(-1px);}
+  .logout-btn svg{width:17px;height:17px;}
+
+  main{max-width:1080px;margin:0 auto;padding:18px 16px 70px;}
+  .view{display:none;}
+  .view.active{display:block;animation:viewIn .55s cubic-bezier(.2,.8,.2,1);}
+  @keyframes viewIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+  .rise{opacity:0;animation:viewIn .6s cubic-bezier(.2,.8,.2,1) forwards;}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative;overflow:hidden;border-radius:24px;padding:20px;color:#fff;margin-bottom:18px;background:radial-gradient(circle at 90% 0%,rgba(224,138,30,.5),transparent 48%),linear-gradient(150deg,var(--green-950),var(--green-800) 75%);box-shadow:var(--shadow);}
+  .hero::before{content:'';position:absolute;inset:-60%;background:conic-gradient(from 0deg,rgba(255,255,255,.07),transparent 25%,rgba(224,138,30,.1) 50%,transparent 75%,rgba(255,255,255,.07));animation:spin 24s linear infinite;}
+  .hero>*{position:relative;z-index:1;}
+  .hero-top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px;flex-wrap:wrap;}
+  .hero-logo{height:54px;width:auto;max-width:70%;object-fit:contain;border-radius:0;background:none;padding:0;display:block;}
+  .hero-date{font-size:11.5px;color:#cfe3d7;font-weight:600;background:rgba(255,255,255,.1);padding:6px 12px;border-radius:999px;}
+  .hero h1{font-family:var(--ff-head);font-size:23px;font-weight:800;margin:0 0 6px;line-height:1.2;}
+  .hero p{margin:0;font-size:13px;color:#cfe3d7;line-height:1.5;max-width:520px;}
+  .hero-metrics{display:flex;gap:22px;margin-top:16px;flex-wrap:wrap;}
+  .hero-metrics div b{display:block;font-family:var(--ff-head);font-size:22px;font-weight:800;}
+  .hero-metrics div span{font-size:11px;color:#b9d2c4;font-weight:600;}
+
+  /* ---------- KPI GRID ---------- */
+  .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px;}
+  @media(min-width:640px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
+  @media(min-width:900px){.kpi-grid{grid-template-columns:repeat(6,1fr);}}
+  .kpi{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:15px 14px;text-align:left;transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease;opacity:0;animation:viewIn .55s cubic-bezier(.2,.8,.2,1) forwards;}
+  .kpi:hover{transform:translateY(-4px);box-shadow:0 18px 28px -22px var(--tint);}
+  .kpi:active{transform:scale(.97);}
+  .kpi-ic{width:34px;height:34px;border-radius:11px;background:var(--tint-lt);color:var(--tint);display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
+  .kpi-ic svg{width:17px;height:17px;}
+  .kpi .num{font-family:var(--ff-head);font-size:24px;font-weight:800;line-height:1;color:var(--ink);}
+  .kpi .lbl{font-size:11px;font-weight:600;color:var(--ink-soft);margin-top:7px;}
+  .kpi .delta{font-size:10.5px;font-weight:700;margin-top:6px;display:inline-flex;align-items:center;gap:3px;}
+  .kpi .delta.up{color:var(--ok);}
+  .kpi .delta.down{color:var(--err);}
+  .kpi.c1{--tint:var(--brand);--tint-lt:var(--chip);}
+  .kpi.c2{--tint:var(--warn);--tint-lt:var(--warn-lt);}
+  .kpi.c3{--tint:var(--ok);--tint-lt:var(--ok-lt);}
+  .kpi.c4{--tint:var(--info);--tint-lt:var(--info-lt);}
+  .kpi.c5{--tint:var(--saffron-dark);--tint-lt:var(--warn-lt);}
+  .kpi.c6{--tint:#7c4dcc;--tint-lt:#efe7fb;}
+
+  /* ---------- CARDS / CHARTS ---------- */
+  .grid2{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:16px;}
+  @media(min-width:860px){.grid2{grid-template-columns:1.5fr 1fr;}}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow);}
+  .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;}
+  .card-head h3{font-family:var(--ff-head);font-size:15.5px;font-weight:800;margin:0;}
+  .card-head .sub{font-size:11.5px;color:var(--ink-soft);margin-top:2px;}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;}
+  .legend span{font-size:11.5px;font-weight:600;color:var(--ink-soft);display:flex;align-items:center;gap:6px;}
+  .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+
+  .chart-wrap{width:100%;overflow-x:auto;}
+  .chart-wrap svg{display:block;min-width:100%;}
+  .line-path{fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}
+  .area-path{opacity:.12;}
+  .dot{transition:r .2s ease;}
+  .axis-lbl{font-size:10px;fill:var(--ink-soft);font-family:var(--ff-body);}
+  .grid-line{stroke:var(--line);stroke-width:1;}
+
+  .donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center;}
+  .donut-legend{display:flex;flex-direction:column;gap:9px;flex:1;min-width:150px;}
+  .donut-legend .row{display:flex;align-items:center;gap:9px;font-size:12.5px;}
+  .donut-legend i{width:10px;height:10px;border-radius:3px;flex:none;}
+  .donut-legend b{margin-left:auto;font-family:var(--ff-head);}
+  .donut-center{font-family:var(--ff-head);font-weight:800;}
+
+  .dept-list{display:flex;flex-direction:column;gap:14px;}
+  .dept-row{padding:14px;border:1px solid var(--line);border-radius:16px;transition:transform .25s ease,box-shadow .25s ease;opacity:0;animation:viewIn .5s cubic-bezier(.2,.8,.2,1) forwards;}
+  .dept-row:hover{transform:translateY(-2px);box-shadow:0 14px 24px -20px rgba(11,61,43,.7);}
+  .dept-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px;}
+  .dept-name{font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:9px;}
+  .dept-dot{width:9px;height:9px;border-radius:3px;flex:none;}
+  .dept-rate{font-family:var(--ff-head);font-weight:800;font-size:14px;}
+  .dept-bar{height:8px;border-radius:5px;background:var(--chip);overflow:hidden;margin-bottom:9px;}
+  .dept-bar i{display:block;height:100%;width:0;border-radius:5px;transition:width 1s cubic-bezier(.2,.8,.2,1);}
+  .dept-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--ink-soft);font-weight:600;}
+  .dept-meta b{color:var(--ink);font-weight:800;}
+
+  .lb-list{display:flex;flex-direction:column;gap:10px;}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:11px;border-radius:14px;transition:background .25s ease;opacity:0;animation:viewIn .5s cubic-bezier(.2,.8,.2,1) forwards;}
+  .lb-row:hover{background:var(--chip);}
+  .lb-rank{width:26px;height:26px;border-radius:50%;background:var(--chip);color:var(--ink-soft);display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-weight:800;font-size:12px;flex:none;}
+  .lb-rank.g1{background:linear-gradient(135deg,#ffd76a,#f2a93a);color:#5c3d05;}
+  .lb-rank.g2{background:linear-gradient(135deg,#dfe6e2,#b9c4bd);color:#33463d;}
+  .lb-rank.g3{background:linear-gradient(135deg,#e3a370,#c97f45);color:#432b12;}
+  .lb-av{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--green-800),var(--green-700));color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-weight:800;font-size:14px;flex:none;}
+  .lb-info{flex:1;min-width:0;}
+  .lb-info b{display:block;font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lb-info span{font-size:11px;color:var(--ink-soft);}
+  .lb-num{text-align:right;flex:none;}
+  .lb-num b{display:block;font-family:var(--ff-head);font-size:16px;font-weight:800;color:var(--brand);}
+  .lb-num span{font-size:10px;color:var(--ink-soft);}
+
+  /* ---------- LISTS / COMPLAINTS ---------- */
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px;gap:10px;flex-wrap:wrap;}
+  .sec-head h2{font-family:var(--ff-head);font-size:17px;font-weight:800;margin:0;}
+  .link-btn{border:none;background:none;color:var(--brand);font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:4px;}
+  .search{position:relative;margin-bottom:12px;}
+  .search svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--ink-soft);}
+  .search input,.search input[type=text],.search input[type=search]{padding-left:44px;}
+  .search svg{pointer-events:none;}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:12px;scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{flex:none;border:1.5px solid var(--line);background:var(--paper);border-radius:999px;padding:8px 15px;font-size:12.5px;font-weight:700;color:var(--ink-soft);transition:all .3s cubic-bezier(.34,1.56,.64,1);}
+  .chip.active{background:var(--brand);border-color:var(--brand);color:#fff;transform:scale(1.05);}
+  .list{display:flex;flex-direction:column;gap:12px;}
+  .c-card{display:flex;gap:13px;background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:11px;text-align:left;width:100%;opacity:0;animation:viewIn .5s cubic-bezier(.2,.8,.2,1) forwards;transition:box-shadow .3s ease,transform .3s cubic-bezier(.34,1.56,.64,1),border-color .3s ease;}
+  .c-card:hover{box-shadow:0 18px 30px -22px rgba(11,61,43,.8);transform:translateY(-3px);border-color:var(--brand);}
+  .c-thumb{width:70px;height:70px;border-radius:13px;background:var(--chip);object-fit:cover;flex:none;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);}
+  .c-thumb svg{width:24px;height:24px;}
+  .c-body{flex:1;min-width:0;}
+  .c-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;}
+  .c-id{font-size:11px;font-weight:700;color:var(--ink-soft);font-family:var(--ff-mono);}
+  .badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px;}
+  .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .badge.review::before{animation:blink 1.4s ease-in-out infinite;}
+  .badge.submitted{background:var(--info-lt);color:var(--info);}
+  .badge.review{background:var(--warn-lt);color:#9a6a08;}
+  [data-theme=dark] .badge.review{color:#f0c261;}
+  .badge.resolved{background:var(--ok-lt);color:var(--ok);}
+  .c-title{font-weight:700;font-size:14.5px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .c-meta{font-size:12px;color:var(--ink-soft);display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  .badge.overdue{background:var(--err-lt);color:var(--err);}
+  .filters{display:flex;gap:8px;margin-bottom:12px;}
+  .filters select{flex:1;min-width:0;padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font:600 12.5px var(--ff-body);}
+  .res-count{font-size:12px;color:var(--ink-soft);margin:0 2px 10px;font-weight:600;}
+  .badge.pri-urgent{background:var(--err);color:#fff;}
+  .badge.pri-medium,.badge.pri-low{background:rgba(120,130,125,.16);color:var(--ink-soft,#5f6d65);}
+  .badge.pri-high{background:var(--warn-lt);color:#9a6a08;}
+  .act-box{margin:6px 0 16px;border-left:2px solid var(--line);padding-left:12px;display:flex;flex-direction:column;gap:9px;}
+  .act-box .k{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;margin-left:-12px;}
+  .act-box div.a{font-size:12.5px;color:var(--body);}
+  .act-box div.a small{display:block;color:var(--ink-soft);font-size:11px;}
+  .hit{fill:transparent;cursor:pointer;}.hit:hover{fill:rgba(224,138,30,.13);}
+  .rt-wrap{overflow-x:auto;margin:0 -2px;}
+  .rt{width:100%;border-collapse:collapse;font-size:12px;}
+  .rt th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);padding:8px;border-bottom:1.5px solid var(--line);white-space:nowrap;}
+  .rt td{padding:9px 8px;border-bottom:1px solid var(--line);white-space:nowrap;color:var(--body);}
+  .rt td:first-child{font-weight:700;color:var(--ink);}
+  .rt tr[data-id]{cursor:pointer;}.rt tr[data-id]:hover td{background:var(--chip);}
+  .rep-ctl{padding:16px;margin-bottom:16px;}
+  .rep-dates{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  .rep-dates label{font-size:11.5px;font-weight:700;color:var(--ink-soft);display:flex;flex-direction:column;gap:5px;}
+  .rep-dates input{padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font:600 13px var(--ff-body);}
+  [data-theme=dark] .rep-dates input{color-scheme:dark;}
+  .rep-actions{display:flex;gap:8px;}
+  .rep-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:6px;}
+  @media(min-width:620px){.rep-kpis{grid-template-columns:repeat(4,1fr);}}
+  .rk{background:var(--field);border:1px solid var(--line);border-radius:14px;padding:12px;}
+  .rk b{display:block;font:800 22px var(--ff-head);color:var(--ink);}.rk span{font-size:11px;color:var(--ink-soft);font-weight:600;}
+  .rep-sec{margin-bottom:16px;}.rep-sec h4{margin:16px 0 8px;font:800 13px var(--ff-head);}
+  .tl-link{cursor:pointer;}
+  @media print{.topbar,.drawer,.scrim,.rep-ctl,.toast,.overlay{display:none!important;}body{background:#fff;}}
+  .assignee{font-weight:700;color:var(--brand);}
+  .assignee.un{color:var(--saffron-dark);}
+  .empty{text-align:center;padding:38px 20px;background:var(--paper);border:1.5px dashed var(--line);border-radius:20px;color:var(--ink-soft);}
+  .empty svg{width:46px;height:46px;color:var(--brand);margin-bottom:10px;}
+  .empty b{display:block;color:var(--ink);font-family:var(--ff-head);font-size:16px;margin-bottom:4px;}
+  .empty span{font-size:13px;display:block;margin-bottom:14px;}
+  .skel{height:92px;border-radius:18px;background:linear-gradient(90deg,var(--chip) 25%,var(--paper) 50%,var(--chip) 75%);background-size:200% 100%;animation:shimmer 1.2s linear infinite;border:1px solid var(--line);}
+  @keyframes shimmer{to{background-position:-200% 0;}}
+  .seed-btn{border:1.5px solid var(--brand);background:transparent;color:var(--brand);font-weight:700;font-size:12.5px;padding:10px 18px;border-radius:12px;}
+  .seed-btn:hover{background:var(--brand);color:#fff;}
+
+  /* ---------- STAFF ---------- */
+  .staff-grid{display:grid;grid-template-columns:1fr;gap:12px;}
+  @media(min-width:640px){.staff-grid{grid-template-columns:1fr 1fr;}}
+  .s-card{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:14px;opacity:0;animation:viewIn .5s cubic-bezier(.2,.8,.2,1) forwards;transition:box-shadow .3s ease,transform .3s ease;}
+  .s-card:hover{box-shadow:0 18px 30px -24px rgba(11,61,43,.8);transform:translateY(-3px);}
+  .s-top{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;}
+  .s-av{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,var(--green-800),var(--green-700));color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--ff-head);font-weight:800;font-size:15px;flex:none;}
+  .s-info{flex:1;min-width:0;}
+  .s-name{font-weight:800;font-size:14px;}
+  .s-role{font-size:11.5px;color:var(--ink-soft);margin-top:1px;}
+  .s-status{font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.3px;flex:none;}
+  .s-status.active{background:var(--ok-lt);color:var(--ok);}
+  .s-status.inactive{background:var(--err-lt);color:var(--err);}
+  .s-mail{font-size:12px;color:var(--ink-soft);margin-bottom:10px;word-break:break-all;}
+  .s-perf{display:flex;gap:8px;margin-bottom:11px;}
+  .s-perf div{flex:1;background:var(--chip);border-radius:11px;padding:8px 6px;text-align:center;}
+  .s-perf b{display:block;font-family:var(--ff-head);font-size:15px;font-weight:800;}
+  .s-perf span{font-size:9.5px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;}
+  .s-actions{display:flex;gap:7px;}
+  .s-actions button{flex:1;padding:9px;border-radius:10px;font-size:11.5px;font-weight:700;transition:transform .2s ease;}
+  .s-actions button:hover{transform:translateY(-1px);}
+  .s-edit{border:1.5px solid var(--line);background:var(--paper);}
+  .s-toggle{border:1.5px solid var(--brand);background:transparent;color:var(--brand);}
+  .s-del{border:1.5px solid #f0c9c5;background:transparent;color:var(--err);}
+
+  .cta{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:15px;border:none;border-radius:16px;background:linear-gradient(100deg,var(--saffron),var(--saffron-lt),var(--saffron));background-size:200% auto;color:#fff;font-family:var(--ff-head);font-weight:800;font-size:15px;margin-bottom:20px;box-shadow:0 16px 28px -16px rgba(224,138,30,.95);transition:transform .25s ease;animation:sheen 4s linear infinite;}
+  @keyframes sheen{to{background-position:-200% center;}}
+  .cta:hover{transform:translateY(-2px);}
+  .cta:active{transform:scale(.98);}
+  .cta svg{width:20px;height:20px;stroke:#fff;stroke-width:2.6;}
+
+  /* ---------- FORMS ---------- */
+  .panel-card{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:20px 18px;box-shadow:var(--shadow);}
+  .page-h{margin-bottom:16px;}
+  .page-h h1{font-family:var(--ff-head);font-size:23px;font-weight:800;margin:0 0 4px;}
+  .page-h p{margin:0;color:var(--ink-soft);font-size:13.5px;}
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-size:11.5px;font-weight:700;letter-spacing:.3px;margin-bottom:7px;}
+  .field label .req{color:var(--saffron-dark);}
+  .field label .opt{font-weight:500;color:var(--ink-soft);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  input[type=text],input[type=email],input[type=tel],input[type=password],select,textarea{width:100%;padding:13px 14px;border-radius:13px;border:1.5px solid var(--line);font-family:var(--ff-body);font-size:14px;background:var(--field);color:var(--ink);outline:none;appearance:none;transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease;}
+  select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%2393a79c' stroke-width='1.6' fill='none'/></svg>");background-repeat:no-repeat;background-position:right 14px center;padding-right:34px;}
+  input:focus,select:focus,textarea:focus{border-color:var(--green-700);box-shadow:0 0 0 4px rgba(19,96,63,.14);transform:translateY(-1px);}
+  ::placeholder{color:#9aa9a0;}
+  .shake{animation:shake .42s;border-color:var(--err)!important;}
+  @keyframes shake{10%,90%{transform:translateX(-1px);}20%,80%{transform:translateX(2px);}30%,50%,70%{transform:translateX(-5px);}40%,60%{transform:translateX(5px);}}
+  .submit{width:100%;padding:15px;border:none;border-radius:15px;background:var(--brand);color:#fff;font-family:var(--ff-head);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .25s ease,filter .25s ease;}
+  .submit:hover{transform:translateY(-2px);filter:brightness(1.12);}
+  .submit .spin{display:none;width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:spin .7s linear infinite;}
+  .submit.loading .spin{display:block;}
+  .submit.loading{pointer-events:none;opacity:.85;}
+
+  /* ---------- PROFILE ---------- */
+  .p-cover{height:88px;border-radius:22px 22px 0 0;margin:-20px -18px 0;background:radial-gradient(circle at 80% 0%,rgba(224,138,30,.55),transparent 55%),linear-gradient(150deg,var(--green-950),var(--green-700));position:relative;overflow:hidden;}
+  .p-cover::after{content:'';position:absolute;inset:-70%;background:conic-gradient(from 0deg,rgba(255,255,255,.08),transparent 30%,rgba(255,255,255,.06) 60%,transparent);animation:spin 20s linear infinite;}
+  .p-head{text-align:center;margin-top:-44px;position:relative;z-index:1;}
+  .p-av{position:relative;width:90px;height:90px;margin:0 auto 12px;}
+  .p-av .av{font-size:30px;border-width:4px;border-color:var(--paper);box-shadow:0 12px 24px -10px rgba(0,0,0,.5);}
+  .p-av button{position:absolute;right:-2px;bottom:2px;width:29px;height:29px;border-radius:50%;border:3px solid var(--paper);background:var(--saffron);color:#fff;display:flex;align-items:center;justify-content:center;transition:transform .3s cubic-bezier(.34,1.56,.64,1);}
+  .p-av button:hover{transform:scale(1.15) rotate(-8deg);}
+  .p-av button svg{width:13px;height:13px;}
+  .p-head h2{font-family:var(--ff-head);font-size:19px;font-weight:800;margin:0 0 3px;}
+  .p-head p{margin:0;color:var(--ink-soft);font-size:13px;}
+  .info-row{display:flex;align-items:center;gap:13px;padding:13px 2px;border-top:1px solid var(--line);opacity:0;animation:viewIn .5s cubic-bezier(.2,.8,.2,1) forwards;}
+  .info-ic{width:37px;height:37px;border-radius:12px;background:var(--chip);color:var(--brand);display:flex;align-items:center;justify-content:center;flex:none;}
+  .info-ic svg{width:17px;height:17px;}
+  .info-row .k{font-size:10.5px;font-weight:700;letter-spacing:.4px;color:var(--ink-soft);text-transform:uppercase;}
+  .info-row .v{font-size:14px;font-weight:600;margin-top:2px;word-break:break-word;}
+  .btn-solid{width:100%;padding:14px;border:none;border-radius:14px;background:var(--brand);color:#fff;font-family:var(--ff-head);font-weight:800;font-size:14px;margin-top:16px;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .25s ease,filter .25s ease;}
+  .btn-solid:hover{transform:translateY(-2px);filter:brightness(1.12);}
+  .btn-solid svg{width:17px;height:17px;}
+
+  /* ---------- SETTINGS ---------- */
+  .set-row{display:flex;align-items:center;gap:14px;padding:16px 4px;border-top:1px solid var(--line);}
+  .set-row:first-child{border-top:none;}
+  .set-ic{width:40px;height:40px;border-radius:12px;background:var(--chip);color:var(--brand);display:flex;align-items:center;justify-content:center;flex:none;}
+  .set-ic svg{width:19px;height:19px;}
+  .set-txt{flex:1;}
+  .set-txt b{display:block;font-size:14px;}
+  .set-txt span{font-size:12px;color:var(--ink-soft);}
+  .set-btn{flex:none;border:1.5px solid var(--line);background:var(--paper);border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:700;}
+  .set-btn:hover{border-color:var(--brand);}
+  .set-btn.danger{border-color:#f0c9c5;color:var(--err);}
+  .set-btn.danger:hover{background:var(--err-lt);}
+
+  /* ---------- OVERLAYS ---------- */
+  .overlay{position:fixed;inset:0;z-index:60;background:rgba(3,16,11,.6);backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .3s ease;}
+  .overlay.show{display:flex;}
+  .overlay.in{opacity:1;}
+  .overlay.center{align-items:center;padding:20px;}
+  @media(min-width:640px){.overlay{align-items:center;padding:20px;}}
+  .sheet{width:100%;max-width:520px;max-height:92vh;overflow-y:auto;background:var(--paper);border-radius:26px 26px 0 0;padding:22px 20px calc(26px + env(safe-area-inset-bottom));transform:translateY(60px);transition:transform .5s cubic-bezier(.2,.8,.2,1);}
+  @media(min-width:640px){.sheet{border-radius:26px;}}
+  .overlay.in .sheet{transform:none;}
+  .sheet-close{float:right;width:34px;height:34px;border-radius:50%;border:none;background:var(--chip);font-size:14px;transition:transform .3s ease;}
+  .sheet-close:hover{transform:rotate(90deg);}
+  .sheet h3{font-family:var(--ff-head);font-size:19px;font-weight:800;margin:0 0 4px;padding-right:40px;}
+  .sheet .sub{font-size:12.5px;color:var(--ink-soft);margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+
+  .res-box{background:var(--ok-lt);border-radius:16px;padding:14px;margin:4px 0 16px;}
+  .res-box .k{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--ok);text-transform:uppercase;margin-bottom:8px;}
+  .res-box img{width:100%;max-height:230px;object-fit:cover;border-radius:12px;margin-bottom:10px;}
+  .res-box p{margin:0 0 8px;font-size:13.5px;line-height:1.55;white-space:pre-wrap;}
+  .res-box .sent{font-size:12px;font-weight:600;color:var(--ok);}
+  .fix-drop{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:16px;border:1.5px dashed var(--line);border-radius:13px;background:var(--field);color:var(--ink);font-weight:600;font-size:13.5px;}
+  .fix-prev{width:100%;max-height:220px;object-fit:cover;border-radius:13px;margin-top:10px;display:none;}
+  .cnt{font-size:11px;color:var(--ink-soft);margin-top:5px;text-align:right;}
+  .sheet-btns button:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+  .detail-img{width:100%;max-height:230px;object-fit:cover;border-radius:16px;margin-bottom:14px;}
+  .kv{margin-bottom:14px;}
+  .kv .k{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--ink-soft);margin-bottom:3px;text-transform:uppercase;}
+  .kv .v{font-size:14px;line-height:1.55;}
+  .timeline{display:flex;align-items:flex-start;margin:16px 0 18px;}
+  .tl-step{flex:1;text-align:center;position:relative;font-size:11.5px;font-weight:600;color:var(--ink-soft);}
+  .tl-step::before{content:'';position:absolute;top:13px;left:-50%;width:100%;height:3px;background:var(--line);z-index:0;}
+  .tl-step:first-child::before{display:none;}
+  .tl-step.on::before{background:var(--ok);}
+  .tl-dot{width:28px;height:28px;border-radius:50%;background:var(--line);margin:0 auto 7px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;}
+  .tl-step.on .tl-dot{background:var(--ok);animation:pop .6s ease both;}
+  .tl-step.on{color:var(--ink);}
+  .sheet-btns{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+  .sheet-btns button{flex:1;min-width:120px;padding:13px;border-radius:13px;font-weight:700;font-size:13.5px;transition:transform .25s ease;}
+  .sheet-btns button:hover{transform:translateY(-2px);}
+  .btn-ghost{border:1.5px solid var(--line);background:var(--paper);color:var(--ink);}
+  .btn-danger{border:none;background:var(--err);color:#fff;}
+  .btn-main{border:none;background:var(--brand);color:#fff;}
+  .btn-warn{border:none;background:var(--warn);color:#fff;}
+  .btn-ok{border:none;background:var(--ok);color:#fff;}
+  .assign-row{display:flex;gap:8px;margin-top:10px;}
+  .assign-row select{flex:1;}
+  .confirm{text-align:center;max-width:350px;border-radius:26px;margin:auto;padding:28px 22px 22px;}
+  .confirm h3{padding:0;}
+  .confirm p{font-size:13.5px;color:var(--ink-soft);margin:6px 0 20px;line-height:1.5;}
+  .confirm .sheet-btns{margin-top:0;}
+  .cred-box{background:var(--chip);border-radius:15px;padding:16px;margin:14px 0;}
+  .cred-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);}
+  .cred-row:last-child{border-bottom:none;}
+  .cred-row .k{font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;}
+  .cred-row .v{font-family:var(--ff-mono);font-weight:700;font-size:13.5px;}
+  .cred-row button{border:none;background:var(--paper);border-radius:9px;padding:6px 10px;font-size:11px;font-weight:700;color:var(--brand);display:flex;align-items:center;gap:5px;}
+  .success-icon{width:76px;height:76px;border-radius:50%;background:var(--ok-lt);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;animation:pop .7s ease;}
+  .success-icon svg{width:36px;height:36px;}
+  .success-icon .tick{stroke:var(--ok);stroke-width:3.2;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30;animation:draw .6s ease forwards .3s;}
+  @keyframes draw{to{stroke-dashoffset:0;}}
+
+  .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,40px);background:var(--green-950);color:#fff;padding:12px 18px;border-radius:14px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:all .4s cubic-bezier(.34,1.56,.64,1);z-index:100;max-width:88vw;text-align:center;box-shadow:0 14px 30px -10px rgba(0,0,0,.5);}
+  .toast.show{opacity:1;transform:translate(-50%,0);}
+  @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn burger" id="burger" aria-label="Menu"><span></span><span></span><span></span></button>
+  <img class="top-logo" src="static/campusfix_logo.png" alt="Shobhit University">
+  <div class="top-title"><b><span class="live-dot"></span>Command Center</b><small id="topSub">CampusFix · Admin Panel</small></div>
+  <span class="bell-wrap"><button class="icon-btn bell" id="bellBtn" aria-label="Notifications"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></button><span class="nbadge" id="nBadge">0</span></span>
+</header>
+<div class="notif-panel" id="notifPanel" role="dialog" aria-label="Notifications">
+  <div class="np-head"><b>Notifications</b><button id="nReadAll">Mark all read</button></div>
+  <div class="np-list" id="nList"></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <button class="av-wrap" data-go="profile" aria-label="Open profile"><div class="av" id="dAv"></div></button>
+    <div class="uname" id="dName"></div>
+    <div class="urole" id="dRole"></div>
+    <div class="udept" id="dDept"></div>
+  </div>
+  <nav class="nav">
+    <button class="nb active" data-go="overview"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12l2-2 4 4 8-9 4 4"/><path d="M3 20h18"/></svg>Overview</button>
+    <button class="nb" data-go="complaints"><svg class="ic" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>Complaints<span class="count" id="navComplaints">0</span></button>
+    <button class="nb" data-go="analytics"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="10" width="4" height="10" rx="1"/><rect x="10" y="5" width="4" height="15" rx="1"/><rect x="17" y="13" width="4" height="7" rx="1"/></svg>Analytics</button>
+    <button class="nb" data-go="reports"><svg class="ic" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>Reports</button>
+    <button class="nb" data-go="staff"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-5.8 6.5-5.8s6.5 2.2 6.5 5.8M16 4.2a3.5 3.5 0 010 6.9M21.5 20c0-2.9-2-4.9-4.5-5.6"/></svg>Staff Accounts</button>
+    <button class="nb" data-go="profile"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>My Profile</button>
+  </nav>
+  <div class="nav-sep"></div>
+  <button class="nb" data-go="settings"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3H9a1.7 1.7 0 001-1.5V15a2 2 0 114 0v.1c.1.7.5 1.3 1 1.5.6.3 1.4.2 1.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9"/></svg>Settings</button>
+  <div class="drawer-foot">
+    <button class="theme-row" id="themeBtn"><svg class="ic" viewBox="0 0 24 24" width="19" height="19"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>Dark mode<span class="switch"></span></button>
+    <button class="logout-btn" id="logoutBtn"><svg class="ic" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>Logout</button>
+  </div>
+</aside>
+
+<main>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section class="view active" id="view-overview">
+    <div class="hero rise">
+      <div class="hero-top">
+        <img class="hero-logo" src="static/Icon1.jpg" alt="Shobhit University NAAC A">
+        <span class="hero-date" id="heroDate"></span>
+      </div>
+      <h1>Welcome back, <span id="hName">Admin</span></h1>
+      <p id="heroSub">Here's the pulse of complaint resolution across your department.</p>
+      <div class="hero-metrics">
+        <div><b id="hmRate">0%</b><span>Resolution Rate</span></div>
+        <div><b id="hmAvg">—</b><span>Avg Resolution Time</span></div>
+        <div><b id="hmMonth">0</b><span>This Month</span></div>
+      </div>
+    </div>
+
+    <div class="kpi-grid" id="kpiGrid">
+      <button class="kpi c1" data-goc="all" style="animation-delay:.04s"><div class="kpi-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg></div><div class="num" id="kTotal">0</div><div class="lbl">Total Complaints</div></button>
+      <button class="kpi c2" data-goc="submitted" style="animation-delay:.08s"><div class="kpi-ic"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="num" id="kPending">0</div><div class="lbl">Pending</div></button>
+      <button class="kpi c2" data-goc="review" style="animation-delay:.12s"><div class="kpi-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-3.5-7.1"/><path d="M21 3v6h-6"/></svg></div><div class="num" id="kReview">0</div><div class="lbl">Under Review</div></button>
+      <button class="kpi c3" data-goc="resolved" style="animation-delay:.16s"><div class="kpi-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg></div><div class="num" id="kDone">0</div><div class="lbl">Resolved</div></button>
+      <button class="kpi c4" data-go="staff" style="animation-delay:.2s"><div class="kpi-ic"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-5.8 6.5-5.8s6.5 2.2 6.5 5.8M16 4.2a3.5 3.5 0 010 6.9M21.5 20c0-2.9-2-4.9-4.5-5.6"/></svg></div><div class="num" id="kStaff">0</div><div class="lbl">Active Staff</div></button>
+      <button class="kpi c6" data-goc="unassigned" style="animation-delay:.24s"><div class="kpi-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></div><div class="num" id="kUnassigned">0</div><div class="lbl">Needs Assignment</div></button>
+    </div>
+
+    <div class="grid2">
+      <div class="card rise" style="animation-delay:.3s">
+        <div class="card-head">
+          <div data-go="reports" class="tl-link"><h3>Monthly Trend</h3><div class="sub">Tap a month for details · <b style="color:var(--brand)">Full report ›</b></div></div>
+          <div class="legend"><span><i style="background:var(--saffron)"></i>Received</span><span><i style="background:var(--ok)"></i>Resolved</span></div>
+        </div>
+        <div class="chart-wrap"><svg id="trendChart" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet"></svg></div>
+      </div>
+      <div class="card rise" style="animation-delay:.36s">
+        <div class="card-head"><div><h3>By Category</h3><div class="sub">Share of total complaints</div></div></div>
+        <div class="donut-wrap" id="donutWrap"></div>
+      </div>
+    </div>
+
+    <div class="sec-head"><h2>Recent Complaints</h2><button class="link-btn" data-go="complaints">View all <svg class="ic" viewBox="0 0 24 24" width="14" height="14"><path d="M9 18l6-6-6-6"/></svg></button></div>
+    <div class="list" id="recentList"></div>
+  </section>
+
+  <!-- ============ COMPLAINTS ============ -->
+  <section class="view" id="view-complaints">
+    <div class="page-h"><h1>All Complaints</h1><p>Assign staff and track resolution across your department.</p></div>
+    <div class="search"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" id="searchInp" placeholder="Search by title, ID, category or address"></div>
+    <div class="chips" id="chips">
+      <button class="chip active" data-f="all">All</button>
+      <button class="chip" data-f="submitted">Pending</button>
+      <button class="chip" data-f="review">Under Review</button>
+      <button class="chip" data-f="resolved">Resolved</button>
+      <button class="chip" data-f="unassigned">Unassigned</button>
+      <button class="chip" data-f="overdue">Overdue</button>
+      <button class="chip" data-f="urgent">High Priority</button>
+    </div>
+    <div class="filters"><select id="catSel"><option value="">All categories</option></select><select id="sortSel"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="priority">By priority</option><option value="status">By status</option></select></div>
+    <div class="res-count" id="resCount"></div>
+    <div class="list" id="list"></div>
+  </section>
+
+  <!-- ============ ANALYTICS ============ -->
+  <section class="view" id="view-analytics">
+    <div class="page-h"><h1>Analytics &amp; Reports</h1><p>Department performance, staff output and resolution trends.</p></div>
+
+    <div class="card rise" style="margin-bottom:16px" id="trendCard2">
+      <div class="card-head">
+        <div data-go="reports" class="tl-link"><h3>Monthly Trend</h3><div class="sub">Tap a month for details · <b style="color:var(--brand)">Full report ›</b></div></div>
+        <div class="legend"><span><i style="background:var(--saffron)"></i>Received</span><span><i style="background:var(--ok)"></i>Resolved</span></div>
+      </div>
+      <div class="chart-wrap"><svg id="trendChart2" viewBox="0 0 780 240" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card rise" style="animation-delay:.08s">
+        <div class="card-head"><div><h3>Department Performance</h3><div class="sub">Resolution rate by department</div></div></div>
+        <div class="dept-list" id="deptList"></div>
+      </div>
+      <div class="card rise" style="animation-delay:.14s">
+        <div class="card-head"><div><h3>Staff Leaderboard</h3><div class="sub">Most complaints resolved</div></div></div>
+        <div class="lb-list" id="lbList"></div>
+      </div>
+    </div>
+
+    <div class="card rise" style="animation-delay:.2s">
+      <div class="card-head"><div><h3>Category Breakdown</h3><div class="sub">All-time complaint volume by category</div></div></div>
+      <div class="bars" id="catBars" style="display:flex;flex-direction:column;gap:11px"></div>
+    </div>
+  </section>
+
+  <!-- ============ REPORTS ============ -->
+  <section class="view" id="view-reports">
+    <div class="page-h"><h1>Detailed Report</h1><p>Pick any date range — month, week and department wise breakdown.</p></div>
+    <div class="card rep-ctl">
+      <div class="rep-dates"><label>From<input type="date" id="repFrom"></label><label>To<input type="date" id="repTo"></label></div>
+      <div class="chips" id="repQuick"><button class="chip" data-q="month">This month</button><button class="chip" data-q="last">Last month</button><button class="chip" data-q="3m">Last 3 months</button><button class="chip" data-q="6m">Last 6 months</button><button class="chip" data-q="all">All time</button></div>
+      <div class="filters"><select id="repDept"><option value="">All departments</option></select><select id="repCat"><option value="">All categories</option></select></div>
+      <div class="rep-actions"><button class="set-btn" id="repCsv">Download CSV</button><button class="set-btn" id="repPrint">Print / PDF</button></div>
+    </div>
+    <div id="repBody"></div>
+  </section>
+
+  <!-- ============ STAFF ============ -->
+  <section class="view" id="view-staff">
+    <div class="page-h"><h1>Staff Accounts</h1><p>Create logins for wardens and staff so they can manage complaints.</p></div>
+    <button class="cta" id="addStaffBtn"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Register Staff Account</button>
+    <div class="search"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="text" id="staffSearch" placeholder="Search staff by name, email or department"></div>
+    <div class="staff-grid" id="staffGrid"></div>
+  </section>
+
+  <!-- ============ PROFILE ============ -->
+  <section class="view" id="view-profile">
+    <div class="page-h"><h1>My Profile</h1><p>Your details as Admin.</p></div>
+    <div class="panel-card">
+      <div class="p-cover"></div>
+      <div class="p-head">
+        <div class="p-av"><div class="av" id="pAv"></div><button id="pPhotoBtn" aria-label="Change photo"><svg class="ic" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button></div>
+        <h2 id="pName"></h2>
+        <p id="pRole"></p>
+      </div>
+      <div id="infoList"></div>
+      <button class="btn-solid" id="editBtn"><svg class="ic" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>Edit Profile</button>
+      <input type="file" id="filePhoto" accept="image/*" hidden>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section class="view" id="view-settings">
+    <div class="page-h"><h1>Settings</h1><p>Preferences and data tools for this dashboard.</p></div>
+    <div class="panel-card">
+      <div class="set-row">
+        <div class="set-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg></div>
+        <div class="set-txt"><b>Dark mode</b><span>Switch the dashboard theme</span></div>
+        <button class="theme-row" id="themeBtn2" style="width:auto;padding:0"><span class="switch"></span></button>
+      </div>
+      <div class="set-row">
+        <div class="set-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0l4-4m-4 4l-4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg></div>
+        <div class="set-txt"><b>Export data</b><span>Download complaints &amp; staff as JSON</span></div>
+        <button class="set-btn" id="exportBtn">Export</button>
+      </div>
+      <div class="set-row">
+        <div class="set-ic"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12m0 0l4-4m-4 4l-4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg></div>
+        <div class="set-txt"><b>Export report (CSV)</b><span>Complaints sheet for Excel / reports</span></div>
+        <button class="set-btn" id="csvBtn">CSV</button>
+      </div>
+      </div>
+  </section>
+
+</main>
+
+<div class="overlay" id="sheetOverlay"><div class="sheet" id="sheet"></div></div>
+<div class="overlay center" id="confirmOverlay"><div class="sheet confirm" id="confirmBox"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const LOGIN_URL = '/logout';
+  const K = {theme:'campusfix_theme'};      // only the theme stays in this browser; everything else lives on the server
+  const $ = id => document.getElementById(id);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const get = (k,d) => { try{ const v = JSON.parse(localStorage.getItem(k)); return v ?? d; }catch(e){ return d; } };
+  const put = (k,v) => { try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } };
+  const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmtDate = ts => new Date(ts).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+  const status = {submitted:{label:'Pending',cls:'submitted'},review:{label:'Under Review',cls:'review'},resolved:{label:'Resolved',cls:'resolved'}};
+  const CATS = ['Hostel','Mess','Classroom','Electricity','Water','Wi-Fi','Cleanliness','Other'];
+  const CAT_COLORS = {Hostel:'#0e4d36',Mess:'#e08a1e',Classroom:'#2b6cb0',Electricity:'#c98a10',Water:'#1a7a99',Wifi:'#7c4dcc','Wi-Fi':'#7c4dcc',Cleanliness:'#189a56',Other:'#8a8f87'};
+  const CAT_DEPT = {Hostel:'Hostel Administration',Mess:'Mess & Catering',Electricity:'Maintenance',Water:'Maintenance',Cleanliness:'Maintenance','Wi-Fi':'IT Support',Classroom:'General Administration',Other:'General Administration'};
+  const DEPTS = ['Hostel Administration','Mess & Catering','Maintenance','IT Support','General Administration'];
+  const DEPT_COLORS = {'Hostel Administration':'#0e4d36','Mess & Catering':'#e08a1e','Maintenance':'#c4372f','IT Support':'#2b6cb0','General Administration':'#7c4dcc'};
+  const ROLES = ['Warden','Assistant Warden','Mess Manager','IT Support Staff','Maintenance Staff','Administrative Staff'];
+  const ICN = {
+    id:'<path d="M3 5h18v14H3z"/><path d="M7 10h4M7 14h6"/>',
+    dept:'<path d="M2 8l10-5 10 5-10 5z"/><path d="M6 10.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-5.5"/>',
+    role:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+    mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+    phone:'<path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 1.9.7 2.8a2 2 0 01-.5 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.8.6 2.8.7a2 2 0 011.7 2z"/>',
+    check:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>'
+  };
+  const svg = (p,w=20) => `<svg class="ic" width="${w}" height="${w}" viewBox="0 0 24 24">${p}</svg>`;
+
+  // ---------- Admin profile ----------
+  const hodDefaults = {name:'', role:'Admin', dept:DEPTS[4], email:'', phone:'', empId:'', photo:''};
+  let hod = Object.assign({}, hodDefaults);   // filled from /api/hod/profile
+  if(!hod.role || /head of/i.test(hod.role) || hod.role==='HOD') hod.role='Admin';
+  document.documentElement.dataset.theme = get(K.theme,'light');
+
+  function initials(n){ return (n||'H').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase() || 'H'; }
+  function avatarHTML(p,n){ return p ? `<img src="${p}" alt="">` : initials(n); }
+  function renderHod(){
+    $('dAv').innerHTML = avatarHTML(hod.photo,hod.name); $('pAv').innerHTML = avatarHTML(hod.photo,hod.name);
+    $('dName').textContent = hod.name || 'Admin'; $('pName').textContent = hod.name || 'Admin';
+    $('dRole').textContent = hod.role; $('pRole').textContent = hod.role + (hod.dept?' · '+hod.dept:'');
+    $('dDept').textContent = hod.dept;
+    $('hName').textContent = (hod.name||'Admin').split(' ')[0];
+    $('topSub').innerHTML = '<span class="live-dot" style="display:none"></span>' + 'CampusFix · ' + (hod.dept||'Admin Panel');
+    const rows = [['id','Employee ID',hod.empId||'—'],['dept','Department',hod.dept||'—'],['role','Designation',hod.role||'—'],['mail','Email',hod.email||'—'],['phone','Mobile',hod.phone||'—']];
+    $('infoList').innerHTML = rows.map((r,i)=>`<div class="info-row" style="animation-delay:${i*.06}s"><div class="info-ic">${svg(ICN[r[0]],17)}</div><div><div class="k">${r[1]}</div><div class="v">${esc(r[2])}</div></div></div>`).join('');
+  }
+
+  // ---------- nav ----------
+  const titles = {overview:'Overview',complaints:'Complaints',analytics:'Analytics',staff:'Staff Accounts',profile:'My Profile',reports:'Detailed Report',settings:'Settings'};
+  let current = 'overview', pendingFilter = null;
+  function go(view){
+    if(!titles[view]) return;
+    current = view;
+    $$('.view').forEach(v=>v.classList.remove('active'));
+    $('view-'+view).classList.add('active');
+    $$('.nb').forEach(b=>b.classList.toggle('active', b.dataset.go===view));
+    closeDrawer(); window.scrollTo({top:0,behavior:'smooth'});
+    if(view==='overview') renderOverview();
+    if(view==='complaints') renderList();
+    if(view==='analytics') renderAnalytics();
+    if(view==='staff') renderStaff();
+    if(view==='reports') renderReport();
+  }
+  document.addEventListener('click',e=>{ const t=e.target.closest('[data-go]'); if(t) go(t.dataset.go); });
+  document.addEventListener('click',e=>{ const t=e.target.closest('[data-goc]'); if(t){ pendingFilter=t.dataset.goc; go('complaints'); } });
+
+  const burger=$('burger'), drawer=$('drawer'), scrim=$('scrim');
+  const openDrawer=()=>{ drawer.classList.add('open'); scrim.classList.add('show'); burger.classList.add('open'); };
+  function closeDrawer(){ drawer.classList.remove('open'); scrim.classList.remove('show'); burger.classList.remove('open'); }
+  burger.addEventListener('click',()=> drawer.classList.contains('open')?closeDrawer():openDrawer());
+  scrim.addEventListener('click', closeDrawer);
+
+  document.addEventListener('click',e=>{
+    const b = e.target.closest('button, .kpi');
+    if(!b) return;
+    const r = b.getBoundingClientRect(), s = Math.max(r.width,r.height);
+    const sp = document.createElement('span'); sp.className='ripple';
+    sp.style.cssText = `width:${s}px;height:${s}px;left:${e.clientX-r.left-s/2}px;top:${e.clientY-r.top-s/2}px`;
+    if(getComputedStyle(b).position==='static') b.style.position='relative';
+    b.style.overflow='hidden'; b.appendChild(sp); setTimeout(()=>sp.remove(),620);
+  });
+
+  function countUp(el,to){
+    const from=parseInt(el.textContent)||0;
+    if(from===to){ el.textContent=to; return; }
+    const dur=900, st=performance.now();
+    (function tick(now){ const p=Math.min((now-st)/dur,1); el.textContent=Math.round(from+(to-from)*(1-Math.pow(1-p,3))); if(p<1) requestAnimationFrame(tick); })(st);
+  }
+  // ============ DATA LAYER (server is the single source of truth) ============
+  ['campusfix_complaints','campusfix_staff','campusfix_hod'].forEach(k=>{ try{ localStorage.removeItem(k); }catch(e){} });  // old local copies are no longer used
+  let complaintsCache = [], staffCache = [], serverDown = false;
+
+  async function api(url, opts={}){
+    try{
+      const res = await fetch(url, Object.assign({credentials:'same-origin'}, opts));
+      if(res.status===401){ window.location.href = LOGIN_URL; return {ok:false, msg:'Session expired'}; }
+      let data = null; try{ data = await res.json(); }catch(e){}
+      serverDown = false;
+      if(res.ok && !(data && data.success===false)) return {ok:true, data};
+      return {ok:false, msg:(data && data.message) || ('Server error ('+res.status+')')};
+    }catch(e){ serverDown = true; return {ok:false, msg:'Server connection failed'}; }
+  }
+  const postJSON = (url, body, method='POST') => api(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  const patchC = (id, body) => postJSON('/api/hod/complaints/'+encodeURIComponent(id), body);
+
+  async function fetchC(){ const r = await api('/api/hod/complaints'); if(r.ok && Array.isArray(r.data)) complaintsCache = r.data; return r.ok; }
+  async function fetchS(){ const r = await api('/api/hod/staff'); if(r.ok && Array.isArray(r.data)) staffCache = r.data; return r.ok; }
+  async function fetchProfile(){ const r = await api('/api/hod/profile'); if(r.ok && r.data){ Object.assign(hod, r.data); hod.role = 'Admin'; } return r.ok; }
+  const loadC = () => complaintsCache;     // sync read of the last fetched list
+  const loadS = () => staffCache;
+
+  const staffName=id=>{ const s=loadS().find(x=>x.id===id); return s?s.name:''; };
+  const deptOf=c=>{ if(c.assignedTo){ const s=loadS().find(x=>x.id===c.assignedTo); if(s) return s.dept; } return CAT_DEPT[c.category]||'General Administration'; };
+  const PRI={low:'Low',medium:'Normal',high:'Important',urgent:'Urgent'}, PRI_W={urgent:0,high:1,medium:2,low:3};
+  const pri=c=>c.priority||'medium';
+  const SLA_H=72;
+  const isOverdue=c=>c.status!=='resolved' && (Date.now()-c.createdAt)/3600000>SLA_H;
+  const resHours=c=> c.status==='resolved' && c.resolvedAt ? (c.resolvedAt-c.createdAt)/3600000 : null;
+
+  function fmtHours(h){
+    if(h==null) return '—';
+    if(h<1) return Math.round(h*60)+'m';
+    if(h<48) return h.toFixed(1)+'h';
+    return (h/24).toFixed(1)+'d';
+  }
+  function monthKey(ts){ const d=new Date(ts); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function monthLbl(ts){ return new Date(ts).toLocaleDateString('en-IN',{month:'short'}); }
+  function last6Months(){
+    const arr=[]; const now=new Date();
+    for(let i=5;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); arr.push({key:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), lbl:d.toLocaleDateString('en-IN',{month:'short'})}); }
+    return arr;
+  }
+
+  function cardHTML(c,i){
+    const st=status[c.status];
+    const thumb=c.photo?`<img class="c-thumb" src="${c.photo}" alt="">`:`<div class="c-thumb"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>`;
+    const who = c.assignedTo ? `<span class="assignee">${esc(staffName(c.assignedTo)||'Assigned')}</span>` : `<span class="assignee un">Unassigned</span>`;
+    return `<button class="c-card" data-id="${c.id}" style="animation-delay:${i*0.05}s">${thumb}<div class="c-body"><div class="c-top"><span class="c-id">${c.id}</span><span><span class="badge pri-${pri(c)}">${PRI[pri(c)]}</span> ${isOverdue(c)?'<span class="badge overdue">Overdue</span> ':''}<span class="badge ${st.cls}">${st.label}</span></span></div><div class="c-title">${esc(c.title)}</div><div class="c-meta"><span>${esc(c.category)}</span><span>${fmtDate(c.createdAt)}</span>${who}</div></div></button>`;
+  }
+
+  // ============ OVERVIEW ============
+  function renderOverview(){
+    const all=loadC(), staff=loadS();
+    const now=new Date(), monthStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+    const resolved = all.filter(c=>c.status==='resolved');
+    const rate = all.length ? Math.round(resolved.length/all.length*100) : 0;
+    const times = resolved.map(resHours).filter(h=>h!=null);
+    const avg = times.length ? times.reduce((a,b)=>a+b,0)/times.length : null;
+    const thisMonth = all.filter(c=>c.createdAt>=monthStart).length;
+
+    $('heroDate').textContent = now.toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+    $('heroSub').textContent = !all.length ? 'No complaints reported yet — new student reports will appear here.' : `${all.filter(c=>c.status!=='resolved').length} complaint${all.filter(c=>c.status!=='resolved').length===1?'':'s'} still need attention (${all.filter(isOverdue).length} overdue) across ${DEPTS.length} departments.`;
+    $('hmRate').textContent = rate+'%'; $('hmAvg').textContent = fmtHours(avg); $('hmMonth').textContent = thisMonth;
+
+    countUp($('kTotal'),all.length);
+    countUp($('kPending'),all.filter(c=>c.status==='submitted').length);
+    countUp($('kReview'),all.filter(c=>c.status==='review').length);
+    countUp($('kDone'),resolved.length);
+    countUp($('kStaff'),staff.filter(s=>s.active).length);
+    countUp($('kUnassigned'),all.filter(c=>!c.assignedTo && c.status!=='resolved').length);
+    updateBadges();
+
+    drawTrend('trendChart', 560, 220);
+    drawDonut();
+
+    const recent = all.slice().sort((a,b)=>b.createdAt-a.createdAt).slice(0,5);
+    $('recentList').innerHTML = recent.length ? recent.map((c,i)=>cardHTML(c,i)).join('') : `<div class="empty"><svg class="ic" viewBox="0 0 24 24">${ICN.check}</svg><b>No complaints yet</b><span>New student reports will appear here.</span></div>`;
+    $('recentList').querySelectorAll('.c-card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+  }
+  function updateBadges(){ if(typeof renderNotifBadge==='function'&&window.__nReady) renderNotifBadge();
+    const open = loadC().filter(c=>c.status!=='resolved').length;
+    $('navComplaints').textContent = open>99?'99+':open;
+    $('navComplaints').classList.toggle('show', open>0);
+  }
+
+  // ---------- trend chart (SVG line) ----------
+  function drawTrend(id,W,H){
+    const months = last6Months();
+    const all = loadC();
+    const received = months.map(m=>all.filter(c=>monthKey(c.createdAt)===m.key).length);
+    const resolved = months.map(m=>all.filter(c=>c.status==='resolved' && c.resolvedAt && monthKey(c.resolvedAt)===m.key).length);
+    const maxV = Math.ceil(Math.max(3, ...received, ...resolved)/3)*3;
+    const padL=34, padR=14, padT=14, padB=28;
+    const innerW = W-padL-padR, innerH = H-padT-padB;
+    const stepX = innerW/(months.length-1||1);
+    const yOf = v => padT + innerH - (v/maxV)*innerH;
+    const ptsR = received.map((v,i)=>[padL+i*stepX, yOf(v)]);
+    const ptsD = resolved.map((v,i)=>[padL+i*stepX, yOf(v)]);
+    const path = pts => pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    const area = pts => path(pts)+` L${pts[pts.length-1][0].toFixed(1)},${padT+innerH} L${pts[0][0].toFixed(1)},${padT+innerH} Z`;
+    let gridLines='', axisLbls='';
+    for(let g=0;g<=3;g++){ const y=padT+innerH-(g/3)*innerH; gridLines+=`<line class="grid-line" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>`; axisLbls+=`<text class="axis-lbl" x="4" y="${y+3}">${Math.round(maxV*g/3)}</text>`; }
+    months.forEach((m,i)=>{ axisLbls+=`<text class="axis-lbl" x="${padL+i*stepX}" y="${H-8}" text-anchor="middle">${m.lbl}</text>`; });
+    const hits = months.map((m,i)=>`<rect class="hit" data-mk="${m.key}" x="${Math.max(0,padL+i*stepX-stepX/2)}" y="0" width="${stepX}" height="${H}"/>`).join('');
+    const dotsR = ptsR.map(p=>`<circle class="dot" cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--saffron)"/>`).join('');
+    const dotsD = ptsD.map(p=>`<circle class="dot" cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--ok)"/>`).join('');
+    $(id).innerHTML = `${gridLines}
+      <path class="area-path" d="${area(ptsR)}" fill="var(--saffron)"/>
+      <path class="area-path" d="${area(ptsD)}" fill="var(--ok)"/>
+      <path class="line-path" id="${id}pr" d="${path(ptsR)}" stroke="var(--saffron)"/>
+      <path class="line-path" id="${id}pd" d="${path(ptsD)}" stroke="var(--ok)"/>
+      ${dotsR}${dotsD}${axisLbls}${hits}`;
+    [id+'pr', id+'pd'].forEach(pid=>{
+      const el = $(pid); const len = el.getTotalLength();
+      el.style.strokeDasharray = len; el.style.strokeDashoffset = len;
+      requestAnimationFrame(()=>{ el.style.transition='stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)'; el.style.strokeDashoffset=0; });
+    });
+  }
+
+  // ---------- donut chart ----------
+  function drawDonut(){
+    const all = loadC();
+    const counts = {}; all.forEach(c=>counts[c.category]=(counts[c.category]||0)+1);
+    const entries = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+    const total = all.length;
+    const R=58, C=2*Math.PI*R, cx=76, cy=76;
+    let offset=0, segs='';
+    entries.forEach(([cat,v])=>{
+      const frac=v/total, len=frac*C;
+      segs += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${CAT_COLORS[cat]||'#8a8f87'}" stroke-width="17" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt"/>`;
+      offset += len;
+    });
+    const legend = entries.map(([cat,v])=>`<div class="row"><i style="background:${CAT_COLORS[cat]||'#8a8f87'}"></i>${esc(cat)}<b>${Math.round(v/total*100)||0}%</b></div>`).join('');
+    $('donutWrap').innerHTML = total ? `
+      <svg width="152" height="152" viewBox="0 0 152 152">
+        <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--chip)" stroke-width="17"/>
+        ${segs}
+        <text x="${cx}" y="${cy-2}" text-anchor="middle" class="donut-center" font-size="22" fill="var(--ink)">${total}</text>
+        <text x="${cx}" y="${cy+16}" text-anchor="middle" font-size="10" fill="var(--ink-soft)">total</text>
+      </svg>
+      <div class="donut-legend">${legend}</div>` : `<div class="empty" style="width:100%"><b>No data yet</b><span>Complaints will populate this chart.</span></div>`;
+  }
+
+  // ============ COMPLAINTS LIST ============
+  let filter='all', query='', catF='', sortF='new';
+  CATS.forEach(c=>$('catSel').insertAdjacentHTML('beforeend',`<option>${c}</option>`));
+  $('catSel').onchange=e=>{catF=e.target.value;renderList();}; $('sortSel').onchange=e=>{sortF=e.target.value;renderList();};
+  function renderList(){
+    const all=loadC();
+    const f = pendingFilter || filter; pendingFilter=null; filter=f;
+    $$('#chips .chip').forEach(c=>c.classList.toggle('active', c.dataset.f===f));
+    const q=query.trim().toLowerCase();
+    let items = all.filter(c=>{
+      if(f==='unassigned') return !c.assignedTo && c.status!=='resolved';
+      if(f==='overdue') return isOverdue(c);
+      if(f==='urgent') return c.status!=='resolved' && (pri(c)==='urgent'||pri(c)==='high');
+      if(f!=='all') return c.status===f;
+      return true;
+    }).filter(c=>!catF || c.category===catF).filter(c=>!q || (c.title+c.id+c.category+c.address).toLowerCase().includes(q));
+    const ord={submitted:0,review:1,resolved:2};
+    items.sort((a,b)=> sortF==='old'?a.createdAt-b.createdAt : sortF==='priority'?(PRI_W[pri(a)]-PRI_W[pri(b)])||(b.createdAt-a.createdAt) : sortF==='status'?(ord[a.status]-ord[b.status])||(b.createdAt-a.createdAt) : b.createdAt-a.createdAt);
+    $('resCount').textContent=items.length+' complaint'+(items.length===1?'':'s');
+    const list=$('list');
+    if(!items.length){
+      list.innerHTML = `<div class="empty"><svg class="ic" viewBox="0 0 24 24">${ICN.check}</svg><b>${all.length?'Nothing found':'No complaints yet'}</b><span>${all.length?'Try a different filter or search.':'Student complaints will show up here.'}</span></div>`;
+      return;
+    }
+    list.innerHTML = items.map((c,i)=>cardHTML(c,i)).join('');
+    list.querySelectorAll('.c-card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+  }
+  $('chips').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(b){ filter=b.dataset.f; renderList(); }});
+  $('searchInp').addEventListener('input',e=>{ query=e.target.value; renderList(); });
+
+  function openOverlay(o){ o.classList.add('show'); requestAnimationFrame(()=>requestAnimationFrame(()=>o.classList.add('in'))); }
+  function closeOverlay(o){ o.classList.remove('in'); setTimeout(()=>o.classList.remove('show'),350); }
+  $('sheetOverlay').addEventListener('click',e=>{ if(e.target===$('sheetOverlay')) closeOverlay($('sheetOverlay')); });
+  $('confirmOverlay').addEventListener('click',e=>{ if(e.target===$('confirmOverlay')) closeOverlay($('confirmOverlay')); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeOverlay($('sheetOverlay')); closeOverlay($('confirmOverlay')); closeDrawer(); } });
+
+  function ask({title,text,ok,danger=true,cancel='Cancel'}){
+    return new Promise(res=>{
+      $('confirmBox').innerHTML = `<h3>${title}</h3><p>${text}</p><div class="sheet-btns"><button class="btn-ghost" id="cNo">${cancel}</button><button class="${danger?'btn-danger':'btn-main'}" id="cYes">${ok}</button></div>`;
+      openOverlay($('confirmOverlay'));
+      const done=v=>{ closeOverlay($('confirmOverlay')); res(v); };
+      $('cNo').onclick=()=>done(false); $('cYes').onclick=()=>done(true);
+    });
+  }
+
+  function refreshAll(){ if(current==='overview') renderOverview(); if(current==='complaints') renderList(); if(current==='analytics') renderAnalytics(); if(current==='staff') renderStaff(); updateBadges(); }
+  const MIN_REPORT=20;
+  function compressImage(file,max=900){
+    return new Promise((res,rej)=>{
+      const r=new FileReader(); r.onerror=rej;
+      r.onload=()=>{ const img=new Image(); img.onerror=rej;
+        img.onload=()=>{ const k=Math.min(1,max/Math.max(img.width,img.height));
+          const cv=document.createElement('canvas'); cv.width=Math.round(img.width*k); cv.height=Math.round(img.height*k);
+          cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); res(cv.toDataURL('image/jpeg',.78)); };
+        img.src=r.result; };
+      r.readAsDataURL(file);
+    });
+  }
+
+  function openResolve(id){
+    const c=loadC().find(x=>x.id===id); if(!c) return;
+    let fix='';
+    $('sheet').innerHTML=`
+      <button class="sheet-close" id="rClose" aria-label="Close">✕</button>
+      <h3>Resolve complaint</h3>
+      <div class="sub"><span>${c.id}</span><span>·</span><span>${esc(c.title)}</span></div>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 16px;line-height:1.5">Write a clear report. You can also add a photo of the completed fix (optional). Both will be sent to the person who complained.</p>
+      <div class="field"><label>Fix photo <span style="font-weight:500;color:var(--ink-soft)">(optional)</span></label>
+        <input type="file" id="rFile" accept="image/*" hidden>
+        <button type="button" class="fix-drop" id="rPick">📷 Choose / take photo of the fix</button>
+        <img class="fix-prev" id="rPrev" alt="Fix preview">
+      </div>
+      <div class="field"><label>Resolution report <span class="req">*</span></label>
+        <textarea id="rText" rows="5" placeholder="What was the problem, what work was done, who did it, and when? (min ${MIN_REPORT} characters)"></textarea>
+        <div class="cnt" id="rCnt">0 / ${MIN_REPORT} min</div>
+      </div>
+      <div class="sheet-btns">
+        <button class="btn-ghost" id="rBack">Back</button>
+        <button class="btn-ok" id="rSend" disabled>Resolve &amp; Send to Complainer</button>
+      </div>`;
+    const check=()=>{ const n=$('rText').value.trim().length; $('rCnt').textContent=n+' / '+MIN_REPORT+' min'; $('rSend').disabled=!(n>=MIN_REPORT); };
+    $('rClose').onclick=$('rBack').onclick=()=>openDetail(id);
+    $('rPick').onclick=()=>$('rFile').click();
+    $('rFile').onchange=async e=>{
+      const f=e.target.files[0]; e.target.value='';
+      if(!f || !f.type.startsWith('image/')){ toast('Please choose an image'); return; }
+      try{ fix=await compressImage(f); $('rPrev').src=fix; $('rPrev').style.display='block'; $('rPick').textContent='🔄 Change photo'; }
+      catch(err){ fix=''; toast('Could not read that image'); }
+      check();
+    };
+    $('rText').oninput=check;
+    $('rSend').onclick=async()=>{
+      const report=$('rText').value.trim();
+      if(report.length<MIN_REPORT){ toast('Please write a clearer report'); return; }
+      const btn=$('rSend'); btn.disabled=true; btn.textContent='Sending…';
+      const r=await postJSON('/api/hod/complaints/'+encodeURIComponent(id)+'/resolve',fix?{photo:fix,report}:{report});
+      if(!r.ok){ toast(r.msg); btn.disabled=false; btn.innerHTML='Resolve &amp; Send to Complainer'; return; }
+      await fetchC(); closeOverlay($('sheetOverlay')); refreshAll(); toast('Resolved — report & photo sent to complainer ✅');
+    };
+  }
+
+  function openDetail(id){
+    const c = loadC().find(x=>x.id===id); if(!c) return;
+    const st=status[c.status];
+    const step={submitted:0,review:1,resolved:2}[c.status];
+    const tl=['Pending','Under Review','Resolved'].map((t,i)=>`<div class="tl-step ${i<=step?'on':''}"><div class="tl-dot">${i<=step?'✓':''}</div>${t}</div>`).join('');
+    const staffOpts = loadS().filter(s=>s.active).map(s=>`<option value="${s.id}" ${c.assignedTo===s.id?'selected':''}>${esc(s.name)} — ${esc(s.role)} (${loadC().filter(x=>x.assignedTo===s.id&&x.status!=='resolved').length} open)</option>`).join('');
+    $('sheet').innerHTML = `
+      <button class="sheet-close" id="dClose" aria-label="Close">✕</button>
+      <h3>${esc(c.title)}</h3>
+      <div class="sub"><span>${c.id}</span><span>·</span><span>${fmtDate(c.createdAt)}</span><span class="badge ${st.cls}">${st.label}</span>${c.status==='resolved'&&c.resolvedAt?`<span>· resolved in ${fmtHours(resHours(c))}</span>`:''}</div>
+      ${c.photo?`<img class="detail-img" src="${c.photo}" alt="">`:''}
+      <div class="timeline">${tl}</div>
+      <div class="kv"><div class="k">Category</div><div class="v">${esc(c.category)} <span style="color:var(--ink-soft);font-weight:400">· ${esc(deptOf(c))}</span></div></div>
+      <div class="kv"><div class="k">Address</div><div class="v">${esc(c.address)}</div></div>
+      <div class="kv"><div class="k">Details</div><div class="v">${esc(c.details)}</div></div>
+      ${c.resolution?`<div class="res-box"><div class="k">Resolution</div>${c.resolution.photo?`<img src="${c.resolution.photo}" alt="Fix photo">`:''}<p>${esc(c.resolution.report)}</p><div class="sent">✓ Sent to complainer on ${fmtDate(c.notifiedAt||c.resolution.at)}</div></div>`:''}
+      <div class="field"><label>Priority</label><select id="priSel">${Object.entries(PRI).map(([k,v])=>`<option value="${k}" ${pri(c)===k?'selected':''}>${v}</option>`).join('')}</select></div>
+      <div class="field" style="margin-bottom:6px"><label>Assign to staff</label>
+        <div class="assign-row"><select id="assignSel"><option value="">— Unassigned —</option>${staffOpts}</select><button class="btn-main" id="assignBtn" style="flex:none;width:90px;border-radius:13px;font-weight:700;font-size:13px;">Assign</button></div>
+      </div>
+      ${(c.log&&c.log.length)?`<div class="act-box"><div class="k">Activity</div>${c.log.slice().reverse().map(l=>`<div class="a">${esc(l.msg)}<small>${new Date(l.t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')}</div>`:''}
+      <div class="sheet-btns">
+        ${c.status==='submitted'?'<button class="btn-warn" id="mReview">Mark Under Review</button>':''}
+        ${c.status!=='resolved'?'<button class="btn-ok" id="mResolved">Mark Resolved</button>':''}
+        ${c.status==='resolved'?'<button class="btn-ghost" id="mReopen">Reopen</button>':''}
+        <button class="btn-danger" id="dDel">Delete</button>
+      </div>`;
+    openOverlay($('sheetOverlay'));
+    $('dClose').onclick=()=>closeOverlay($('sheetOverlay'));
+    $('priSel').onchange=async e=>{
+      const v=e.target.value; const r=await patchC(id,{priority:v});
+      if(!r.ok){ toast(r.msg); return; }
+      await fetchC(); toast('Priority: '+PRI[v]); refreshAll(); openDetail(id);
+    };
+    $('assignBtn').onclick=async()=>{
+      const val=$('assignSel').value; const r=await patchC(id,{assignedTo:val||null});
+      if(!r.ok){ toast(r.msg); return; }
+      await fetchC(); toast(val?('Assigned to '+staffName(val)):'Complaint unassigned'); refreshAll(); openDetail(id);
+    };
+    async function setStatus(newStatus,msg){
+      if(newStatus==='resolved') return; /* resolving only via openResolve (photo + report required) */
+      const r=await patchC(id,{status:newStatus});
+      if(!r.ok){ toast(r.msg); return; }
+      await fetchC(); closeOverlay($('sheetOverlay')); toast(msg); refreshAll();
+    }
+    if($('mReview')) $('mReview').onclick=()=>setStatus('review','Marked as Under Review');
+    if($('mResolved')) $('mResolved').onclick=()=>openResolve(id);
+    if($('mReopen')) $('mReopen').onclick=()=>setStatus('submitted','Complaint reopened');
+    $('dDel').onclick=async()=>{
+      if(await ask({title:'Delete complaint?',text:`${c.id} will be permanently removed.`,ok:'Delete'})){
+        const r=await api('/api/hod/complaints/'+encodeURIComponent(c.id),{method:'DELETE'});
+        if(!r.ok){ toast(r.msg); return; }
+        await fetchC(); closeOverlay($('sheetOverlay')); refreshAll(); toast('Complaint deleted');
+      }
+    };
+  }
+
+  // ============ ANALYTICS ============
+  function renderAnalytics(){
+    drawTrend('trendChart2', 780, 240);
+    const all = loadC();
+
+    // department performance
+    const byDept = {};
+    DEPTS.forEach(d=>byDept[d]={total:0,resolved:0,times:[]});
+    all.forEach(c=>{ const d=deptOf(c); if(!byDept[d]) byDept[d]={total:0,resolved:0,times:[]}; byDept[d].total++; if(c.status==='resolved'){ byDept[d].resolved++; const h=resHours(c); if(h!=null) byDept[d].times.push(h); } });
+    const staffCountByDept = {}; loadS().forEach(s=>{ staffCountByDept[s.dept]=(staffCountByDept[s.dept]||0)+1; });
+    const deptEntries = Object.entries(byDept).sort((a,b)=>b[1].total-a[1].total);
+    $('deptList').innerHTML = deptEntries.length ? deptEntries.map(([d,v],i)=>{
+      const rate = v.total ? Math.round(v.resolved/v.total*100) : 0;
+      const avg = v.times.length ? v.times.reduce((a,b)=>a+b,0)/v.times.length : null;
+      return `<div class="dept-row" style="animation-delay:${i*.06}s">
+        <div class="dept-top"><div class="dept-name"><span class="dept-dot" style="background:${DEPT_COLORS[d]||'#8a8f87'}"></span>${esc(d)}</div><div class="dept-rate" style="color:${DEPT_COLORS[d]||'#8a8f87'}">${rate}%</div></div>
+        <div class="dept-bar"><i data-w="${rate}" style="background:${DEPT_COLORS[d]||'#8a8f87'}"></i></div>
+        <div class="dept-meta"><span><b>${v.total}</b> total</span><span><b>${v.resolved}</b> resolved</span><span><b>${fmtHours(avg)}</b> avg time</span><span><b>${staffCountByDept[d]||0}</b> staff</span></div>
+      </div>`;
+    }).join('') : `<div class="empty"><b>No data yet</b><span>Department stats appear once complaints come in.</span></div>`;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>$$('.dept-bar i').forEach(b=>b.style.width=b.dataset.w+'%')));
+
+    // staff leaderboard
+    const staff = loadS();
+    const lb = staff.map(s=>{
+      const mine = all.filter(c=>c.assignedTo===s.id);
+      const resolved = mine.filter(c=>c.status==='resolved');
+      const times = resolved.map(resHours).filter(h=>h!=null);
+      const avg = times.length ? times.reduce((a,b)=>a+b,0)/times.length : null;
+      return {s, resolved:resolved.length, avg};
+    }).filter(x=>x.resolved>0).sort((a,b)=>b.resolved-a.resolved).slice(0,6);
+    $('lbList').innerHTML = lb.length ? lb.map((x,i)=>{
+      const rankCls = i===0?'g1':i===1?'g2':i===2?'g3':'';
+      return `<div class="lb-row" style="animation-delay:${i*.06}s">
+        <div class="lb-rank ${rankCls}">${i+1}</div>
+        <div class="lb-av">${initials(x.s.name)}</div>
+        <div class="lb-info"><b>${esc(x.s.name)}</b><span>${esc(x.s.dept)}</span></div>
+        <div class="lb-num"><b>${x.resolved}</b><span>${fmtHours(x.avg)} avg</span></div>
+      </div>`;
+    }).join('') : `<div class="empty"><b>No resolutions yet</b><span>Staff appear here once they resolve complaints.</span></div>`;
+
+    // category breakdown bars
+    const cats = {}; all.forEach(c=>cats[c.category]=(cats[c.category]||0)+1);
+    const centries = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+    const max = centries.length ? centries[0][1] : 1;
+    $('catBars').innerHTML = centries.length ? centries.map(([n,v])=>`<div class="bar-row" style="display:grid;grid-template-columns:90px 1fr 28px;align-items:center;gap:10px;font-size:12.5px;font-weight:600"><span>${esc(n)}</span><div class="bar-track" style="height:9px;border-radius:5px;background:var(--chip);overflow:hidden"><div class="bar-fill" data-w="${v/max*100}" style="height:100%;width:0;border-radius:5px;background:${CAT_COLORS[n]||'#8a8f87'};transition:width 1s cubic-bezier(.2,.8,.2,1)"></div></div><span style="text-align:right;color:var(--ink-soft)">${v}</span></div>`).join('') : `<div class="empty"><b>No data yet</b></div>`;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>$$('#catBars .bar-fill').forEach(b=>b.style.width=b.dataset.w+'%')));
+  }
+
+  // ============ STAFF MANAGEMENT ============
+  let staffQuery='';
+
+  function renderStaff(){
+    const all=loadS();
+    const q=staffQuery.trim().toLowerCase();
+    const items = all.filter(s=>!q || (s.name+s.email+s.dept+s.role).toLowerCase().includes(q)).sort((a,b)=>b.createdAt-a.createdAt);
+    if(!items.length){
+      $('staffGrid').innerHTML = `<div class="empty" style="grid-column:1/-1"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 3-5.8 6.5-5.8s6.5 2.2 6.5 5.8M16 4.2a3.5 3.5 0 010 6.9M21.5 20c0-2.9-2-4.9-4.5-5.6"/></svg><b>${all.length?'No staff found':'No staff accounts yet'}</b><span>${all.length?'Try a different search.':'Tap "Register Staff Account" to add your first staff member.'}</span></div>`;
+      return;
+    }
+    const allC = loadC();
+    $('staffGrid').innerHTML = items.map((s,i)=>{
+      const mine = allC.filter(c=>c.assignedTo===s.id);
+      const active = mine.filter(c=>c.status!=='resolved').length;
+      const done = mine.filter(c=>c.status==='resolved').length;
+      return `<div class="s-card" data-id="${s.id}" style="animation-delay:${i*.06}s">
+        <div class="s-top"><div class="s-av">${initials(s.name)}</div><div class="s-info"><div class="s-name">${esc(s.name)}</div><div class="s-role">${esc(s.role)}</div></div><span class="s-status ${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span></div>
+        <div class="s-mail">${esc(s.email)}</div>
+        <div class="s-perf"><div><b>${active}</b><span>Active</span></div><div><b>${done}</b><span>Resolved</span></div><div><b>${esc(s.dept.split(' ')[0])}</b><span>Dept</span></div></div>
+        <div class="s-actions"><button class="s-edit" data-a="edit">Edit</button><button class="s-edit" data-a="reset">Reset Pass</button><button class="s-toggle" data-a="toggle">${s.active?'Disable':'Enable'}</button><button class="s-del" data-a="del">Delete</button></div>
+      </div>`;
+    }).join('');
+    $('staffGrid').querySelectorAll('.s-card').forEach(card=>{
+      const id=card.dataset.id;
+      card.querySelector('[data-a="edit"]').onclick=()=>openStaffForm(id);
+      card.querySelector('[data-a="reset"]').onclick=()=>resetPass(id);
+      card.querySelector('[data-a="toggle"]').onclick=()=>toggleStaff(id);
+      card.querySelector('[data-a="del"]').onclick=()=>deleteStaff(id);
+    });
+  }
+  $('staffSearch').addEventListener('input',e=>{ staffQuery=e.target.value; renderStaff(); });
+
+  async function resetPass(id){
+    const s=loadS().find(x=>x.id===id); if(!s) return;
+    if(!(await ask({title:'Reset password?',text:`A new temporary password will be generated and emailed to ${esc(s.name)}. Their old password will stop working and they must choose a new one at next login.`,ok:'Reset',danger:false}))) return;
+    const r=await api('/api/hod/staff/'+encodeURIComponent(id)+'/reset-password',{method:'POST'});
+    if(!r.ok){ toast(r.msg); return; }
+    await new Promise(res=>setTimeout(res,380));   // let the confirm dialog finish closing
+    showCredentials(s,!(r.data&&r.data.emailed===false),false);
+  }
+  async function toggleStaff(id){
+    const s=loadS().find(x=>x.id===id); if(!s) return;
+    const name=s.name, enable=!s.active;
+    const r=await postJSON('/api/hod/staff/'+encodeURIComponent(id),{active:enable});
+    if(!r.ok){ toast(r.msg); return; }
+    await fetchS(); renderStaff(); refreshAll();
+    toast(name+(enable?' enabled':' disabled — they can no longer log in'));
+  }
+  async function deleteStaff(id){
+    const s=loadS().find(x=>x.id===id); if(!s) return;
+    if(await ask({title:'Delete staff account?',text:`${esc(s.name)}'s login will be permanently removed. Complaints assigned to them will become unassigned.`,ok:'Delete'})){
+      const r=await api('/api/hod/staff/'+encodeURIComponent(id),{method:'DELETE'});
+      if(!r.ok){ toast(r.msg); return; }
+      await Promise.all([fetchS(),fetchC()]); renderStaff(); refreshAll(); toast('Staff account deleted');
+    }
+  }
+
+  function openStaffForm(editId){
+    const editing = editId ? loadS().find(x=>x.id===editId) : null;
+    const deptOpts = DEPTS.map(d=>`<option ${editing&&editing.dept===d?'selected':''}>${d}</option>`).join('');
+    const roleOpts = ROLES.map(r=>`<option ${editing&&editing.role===r?'selected':''}>${r}</option>`).join('');
+    $('sheet').innerHTML = `
+      <button class="sheet-close" id="sfClose" aria-label="Close">✕</button>
+      <h3>${editing?'Edit staff account':'Register staff account'}</h3>
+      <div class="sub">${editing?'Update their details below.':'A login will be generated for this staff member.'}</div>
+      <form id="sfForm" novalidate>
+        <div class="field"><label>Full Name <span class="req">*</span></label><input type="text" id="sfName" value="${editing?esc(editing.name):''}" placeholder="e.g. Rakesh Sharma"></div>
+        <div class="field"><label>Gmail <span class="req">*</span></label><input type="email" id="sfMail" value="${editing?esc(editing.email):''}" placeholder="staffname@gmail.com"></div>
+        <div class="row2">
+          <div class="field"><label>Department <span class="req">*</span></label><select id="sfDept">${deptOpts}</select></div>
+          <div class="field"><label>Designation <span class="req">*</span></label><select id="sfRole">${roleOpts}</select></div>
+        </div>
+        <div class="field"><label>Mobile <span class="opt">(optional)</span></label><input type="tel" id="sfPhone" value="${editing?esc(editing.phone||''):''}" maxlength="10" inputmode="numeric" placeholder="10-digit number"></div>
+        <div class="sheet-btns"><button type="button" class="btn-ghost" id="sfCancel">Cancel</button><button type="submit" class="btn-main">${editing?'Save Changes':'Create Account'}</button></div>
+      </form>`;
+    openOverlay($('sheetOverlay'));
+    $('sfClose').onclick=$('sfCancel').onclick=()=>closeOverlay($('sheetOverlay'));
+    $('sfForm').onsubmit=async ev=>{
+      ev.preventDefault();
+      const name=$('sfName').value.trim(), mail=$('sfMail').value.trim(), phone=$('sfPhone').value.trim();
+      if(!name){ shake($('sfName')); $('sfName').focus(); return; }
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)){ shake($('sfMail')); $('sfMail').focus(); return; }
+      if(phone && !/^\d{10}$/.test(phone)){ shake($('sfPhone')); $('sfPhone').focus(); return; }
+      if(!editing && loadS().some(s=>s.email.toLowerCase()===mail.toLowerCase())){ shake($('sfMail')); toast('An account with this Gmail already exists'); return; }
+      const body={name,email:mail,dept:$('sfDept').value,role:$('sfRole').value,phone};
+      const btn=$('sfForm').querySelector('[type="submit"]'); btn.disabled=true;
+      if(editing){
+        const r=await postJSON('/api/hod/staff/'+encodeURIComponent(editId),body);
+        btn.disabled=false;
+        if(!r.ok){ toast(r.msg); return; }
+        await fetchS(); closeOverlay($('sheetOverlay')); renderStaff(); refreshAll(); toast('Staff details updated');
+      } else {
+        const r=await postJSON('/api/hod/staff',body);
+        if(!r.ok){ btn.disabled=false; toast(r.msg); return; }
+        await fetchS(); closeOverlay($('sheetOverlay')); renderStaff(); refreshAll();
+        showCredentials({name,email:mail},!(r.data&&r.data.emailed===false),true);   // the password is only emailed, never shown here
+      }
+    };
+  }
+  $('addStaffBtn').addEventListener('click',()=>openStaffForm(null));
+
+  function showCredentials(rec,emailed,isNew){
+    const first=esc(rec.name.split(' ')[0]);
+    $('confirmBox').innerHTML = `
+      <div class="success-icon"><svg viewBox="0 0 24 24"><polyline class="tick" points="4 12 9 17 20 6"/></svg></div>
+      <h3>${isNew?'Staff account created':'Password reset'}</h3>
+      ${emailed
+        ? `<p style="margin-bottom:0">A temporary password has been emailed to <b>${esc(rec.email)}</b>. ${first} will be asked to set a new password at the first login.</p>`
+        : `<p style="margin-bottom:0;color:var(--err)">The account is ready, but the email to <b>${esc(rec.email)}</b> could not be sent. Check the email settings, then use <b>Reset Pass</b> to send the password again.</p>`}
+      <p style="font-size:11.5px;margin:12px 0 16px">For security the password is never shown on screen.</p>
+      <div class="sheet-btns"><button class="btn-main" id="credDone" style="flex:1">Done</button></div>`;
+    openOverlay($('confirmOverlay'));
+    $('credDone').onclick=()=>closeOverlay($('confirmOverlay'));
+  }
+  function copyText(t){
+    const ok=()=>toast('Copied: '+t);
+    if(navigator.clipboard) navigator.clipboard.writeText(t).then(ok,()=>toast('Could not copy'));
+    else{ const a=document.createElement('textarea'); a.value=t; document.body.appendChild(a); a.select(); try{document.execCommand('copy'); ok();}catch(e){toast('Could not copy');} a.remove(); }
+  }
+
+  // ============ ADMIN PROFILE EDIT ============
+  $('editBtn').addEventListener('click',()=>{
+    const deptOpts = DEPTS.map(d=>`<option ${hod.dept===d?'selected':''}>${d}</option>`).join('');
+    $('sheet').innerHTML = `
+      <button class="sheet-close" id="eClose" aria-label="Close">✕</button>
+      <h3>Edit profile</h3><div class="sub">Update your Admin details</div>
+      <form id="eForm" novalidate>
+        <div class="field"><label>Full Name</label><input type="text" id="eName" value="${esc(hod.name)}" placeholder="Your full name"></div>
+        <div class="field"><label>Employee ID</label><input type="text" id="eEmpId" value="${esc(hod.empId)}" placeholder="e.g. SU-EMP-014"></div>
+        <div class="field"><label>Department</label><select id="eDept">${deptOpts}</select></div>
+        <div class="field"><label>Email</label><input type="email" id="eMail" value="${esc(hod.email)}" placeholder="you@shobhituniversity.ac.in"></div>
+        <div class="field"><label>Mobile <span class="opt">(optional)</span></label><input type="tel" id="ePhone" value="${esc(hod.phone)}" maxlength="10" inputmode="numeric" placeholder="10-digit number"></div>
+        <div class="field"><button type="button" class="btn-ghost" id="ePw" style="width:100%">Change password</button></div>
+        <div class="sheet-btns"><button type="button" class="btn-ghost" id="eCancel">Cancel</button><button type="submit" class="btn-main">Save Changes</button></div>
+      </form>`;
+    openOverlay($('sheetOverlay'));
+    $('eClose').onclick=$('eCancel').onclick=()=>closeOverlay($('sheetOverlay'));
+  $('ePw').onclick = () => {
+    $('sheet').innerHTML = `
+      <button class="sheet-close" id="pClose" aria-label="Close">✕</button>
+      <h3>Change password</h3><div class="sub">Use at least 6 characters</div>
+      <form id="pForm" novalidate>
+        <div class="field"><label>Current Password</label><input type="password" id="pOld" autocomplete="current-password"></div>
+        <div class="field"><label>New Password</label><input type="password" id="pNew" autocomplete="new-password"></div>
+        <div class="field"><label>Confirm New Password</label><input type="password" id="pNew2" autocomplete="new-password"></div>
+        <div class="sheet-btns"><button type="button" class="btn-ghost" id="pCancel">Cancel</button><button type="submit" class="btn-main">Save Password</button></div>
+      </form>`;
+    $('pClose').onclick = $('pCancel').onclick = () => closeOverlay($('sheetOverlay'));
+    $('pForm').onsubmit = async ev => {
+      ev.preventDefault();
+      const old = $('pOld').value, n1 = $('pNew').value, n2 = $('pNew2').value;
+      if(!old){ shake($('pOld')); $('pOld').focus(); return; }
+      if(n1.length < 6){ shake($('pNew')); toast('Password must be at least 6 characters'); return; }
+      if(n1 !== n2){ shake($('pNew2')); toast('Passwords do not match'); return; }
+      if(n1 === old){ shake($('pNew')); toast('New password must be different'); return; }
+      const btn = $('pForm').querySelector('[type="submit"]'); btn.disabled = true;
+      const r = await postJSON('/api/change-password', {old, new:n1});
+      btn.disabled = false;
+      if(!r.ok){ toast(r.msg); return; }
+      closeOverlay($('sheetOverlay')); toast('Password changed');
+    };
+  };
+    $('eForm').onsubmit = async ev => {
+      ev.preventDefault();
+      const name = $('eName').value.trim(), mail = $('eMail').value.trim(), phone = $('ePhone').value.trim();
+      if(!name){ shake($('eName')); $('eName').focus(); return; }
+      if(mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)){ shake($('eMail')); $('eMail').focus(); return; }
+      if(phone && !/^\d{10}$/.test(phone)){ shake($('ePhone')); $('ePhone').focus(); return; }
+      const body = {name, empId:$('eEmpId').value.trim(), dept:$('eDept').value, email:mail || hod.email, phone};
+      const btn = $('eForm').querySelector('[type="submit"]'); btn.disabled = true;
+      const r = await postJSON('/api/hod/update-profile', body);
+      btn.disabled = false;
+      if(!r.ok){ toast(r.msg); return; }
+      Object.assign(hod, body); renderHod();
+      closeOverlay($('sheetOverlay')); toast('Profile updated successfully! ✅');
+    };
+  });
+  $('pPhotoBtn').addEventListener('click',()=>$('filePhoto').click());
+  $('filePhoto').addEventListener('change',e=>{
+    const f=e.target.files[0]; e.target.value='';
+    if(!f || !f.type.startsWith('image/')){ toast('Please choose an image'); return; }
+    const r=new FileReader();
+    r.onload=()=>{
+      const img=new Image();
+      img.onload=async()=>{
+        const s=Math.min(1,360/Math.max(img.width,img.height));
+        const cv=document.createElement('canvas'); cv.width=Math.round(img.width*s); cv.height=Math.round(img.height*s);
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        const photo=cv.toDataURL('image/jpeg',.82);
+        const res=await postJSON('/api/update-photo',{photo});
+        if(!res.ok){ toast(res.msg); return; }
+        hod.photo=photo; renderHod(); toast('Profile photo updated');
+      };
+      img.src=r.result;
+    };
+    r.readAsDataURL(f);
+  });
+
+  const shake = el => { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),450); };
+
+  // ============ SETTINGS ============
+  function applyTheme(){
+    const isDark = document.documentElement.dataset.theme==='dark';
+    $$('.switch').forEach(s=>{}); // css handles via [data-theme]
+  }
+  function toggleTheme(){
+    const next = document.documentElement.dataset.theme==='dark' ? 'light':'dark';
+    document.documentElement.dataset.theme = next; put(K.theme,next);
+  }
+  $('themeBtn').addEventListener('click',toggleTheme);
+  $('themeBtn2').addEventListener('click',toggleTheme);
+
+  $('exportBtn').addEventListener('click',()=>{
+    const data = {complaints:loadC(), staff:loadS(), hod, exportedAt:new Date().toISOString()};
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='campusfix_export_'+Date.now()+'.json';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast('Data exported');
+  });
+  $('csvBtn').addEventListener('click',()=>{
+    const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const rows=[['ID','Title','Category','Department','Address','Priority','Status','Assigned To','Created','Resolved','Resolution Time','Overdue']];
+    loadC().forEach(c=>rows.push([c.id,c.title,c.category,deptOf(c),c.address,PRI[pri(c)],status[c.status].label,staffName(c.assignedTo),new Date(c.createdAt).toLocaleString('en-IN'),c.resolvedAt?new Date(c.resolvedAt).toLocaleString('en-IN'):'',fmtHours(resHours(c)),isOverdue(c)?'Yes':'No']));
+    const blob=new Blob(['\ufeff'+rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='campusfix_complaints_'+Date.now()+'.csv';
+    document.body.appendChild(a); a.click(); a.remove(); toast('CSV exported');
+  });
+
+
+  // ============ REPORTS & MONTH DETAIL ============
+  const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const shortD=t=>new Date(t).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+  const avgOf=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+  function stats(l){ const r=l.filter(c=>c.status==='resolved'); return {total:l.length,resolved:r.length,review:l.filter(c=>c.status==='review').length,pending:l.filter(c=>c.status==='submitted').length,overdue:l.filter(isOverdue).length,hi:l.filter(c=>c.status!=='resolved'&&(pri(c)==='urgent'||pri(c)==='high')).length,rate:l.length?Math.round(r.length/l.length*100):0,avg:avgOf(r.map(resHours).filter(h=>h!=null))}; }
+  const statRow=(label,l)=>{ const s=stats(l); return [label,s.total,s.resolved,s.pending+s.review,s.rate+'%',fmtHours(s.avg)]; };
+  const STAT_HEAD=['','Total','Resolved','Open','Rate','Avg time'];
+  const rtable=(head,rows,ids)=>`<div class="rt-wrap"><table class="rt"><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map((r,i)=>`<tr${ids?` data-id="${ids[i]}"`:''}>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${head.length}" style="text-align:center;color:var(--ink-soft)">No data</td></tr>`}</tbody></table></div>`;
+  const kpis=s=>`<div class="rep-kpis"><div class="rk"><b>${s.total}</b><span>Received</span></div><div class="rk"><b>${s.resolved}</b><span>Resolved</span></div><div class="rk"><b>${s.pending}</b><span>Pending</span></div><div class="rk"><b>${s.review}</b><span>Under Review</span></div><div class="rk"><b>${s.rate}%</b><span>Resolution Rate</span></div><div class="rk"><b>${fmtHours(s.avg)}</b><span>Avg Resolution Time</span></div><div class="rk"><b>${s.overdue}</b><span>Overdue</span></div><div class="rk"><b>${s.hi}</b><span>High / Urgent Open</span></div></div>`;
+  function weeksBetween(a,b){ const out=[]; let s=new Date(a); s.setHours(0,0,0,0);
+    while(s.getTime()<=b && out.length<60){ const e=new Date(s); e.setDate(e.getDate()+6); e.setHours(23,59,59,999); const end=Math.min(e.getTime(),b);
+      out.push({a:s.getTime(),b:end,label:shortD(s.getTime())+' – '+shortD(end)}); s=new Date(end); s.setDate(s.getDate()+1); s.setHours(0,0,0,0); }
+    return out; }
+  const weekRows=(l,a,b)=>weeksBetween(a,b).map(w=>statRow(w.label,l.filter(c=>c.createdAt>=w.a&&c.createdAt<=w.b)));
+  const deptRows=l=>DEPTS.map(d=>statRow(esc(d),l.filter(c=>deptOf(c)===d)));
+  const catRows=l=>CATS.map(c=>statRow(c,l.filter(x=>x.category===c)));
+  const sectionHTML=(title,html)=>`<div class="card rep-sec"><div class="card-head"><div><h3>${title}</h3></div></div>${html}</div>`;
+
+  // ----- month detail (opens on trend graph click) -----
+  function openMonth(key){
+    const [y,m]=key.split('-').map(Number), a=new Date(y,m-1,1).getTime(), b=new Date(y,m,0,23,59,59,999).getTime();
+    const all=loadC(), l=all.filter(c=>c.createdAt>=a&&c.createdAt<=b), s=stats(l);
+    const resolvedHere=all.filter(c=>c.status==='resolved'&&c.resolvedAt>=a&&c.resolvedAt<=b).length;
+    const title=new Date(a).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+    const recent=l.slice().sort((x,z)=>z.createdAt-x.createdAt).slice(0,6);
+    $('sheet').innerHTML=`<button class="sheet-close" id="mClose" aria-label="Close">✕</button>
+      <h3>${title}</h3><div class="sub"><span>${s.total} received</span><span>·</span><span>${resolvedHere} resolved in this month</span></div>
+      ${kpis(s)}
+      <div class="rep-sec"><h4>Week-wise</h4>${rtable(['Week',...STAT_HEAD.slice(1)],weekRows(l,a,b))}</div>
+      <div class="rep-sec"><h4>Department-wise</h4>${rtable(['Department',...STAT_HEAD.slice(1)],deptRows(l).filter(r=>r[1]>0))}</div>
+      <div class="rep-sec"><h4>Category-wise</h4>${rtable(['Category',...STAT_HEAD.slice(1)],catRows(l).filter(r=>r[1]>0))}</div>
+      <div class="rep-sec"><h4>Recent complaints</h4><div class="list">${recent.length?recent.map((c,i)=>cardHTML(c,i)).join(''):'<div class="empty"><b>No complaints this month</b></div>'}</div></div>
+      <div class="sheet-btns"><button class="btn-ghost" id="mBack">Close</button><button class="btn-main" id="mFull">Full report for ${new Date(a).toLocaleDateString('en-IN',{month:'short'})}</button></div>`;
+    openOverlay($('sheetOverlay'));
+    $('mClose').onclick=$('mBack').onclick=()=>closeOverlay($('sheetOverlay'));
+    $('mFull').onclick=()=>{ rep.from=ymd(new Date(a)); rep.to=ymd(new Date(b)); rep.dept=''; rep.cat=''; closeOverlay($('sheetOverlay')); go('reports'); };
+    $('sheet').querySelectorAll('.c-card').forEach(el=>el.addEventListener('click',()=>openDetail(el.dataset.id)));
+  }
+  document.addEventListener('click',e=>{ const h=e.target.closest('.hit'); if(h) openMonth(h.dataset.mk); });
+
+  // ----- full report page -----
+  const _n=new Date();
+  const rep={from:ymd(new Date(_n.getFullYear(),_n.getMonth()-5,1)),to:ymd(_n),dept:'',cat:''};
+  DEPTS.forEach(d=>$('repDept').insertAdjacentHTML('beforeend',`<option>${esc(d)}</option>`));
+  CATS.forEach(c=>$('repCat').insertAdjacentHTML('beforeend',`<option>${c}</option>`));
+  const repRange=()=>[new Date(rep.from+'T00:00:00').getTime(),new Date(rep.to+'T23:59:59.999').getTime()];
+  function repList(){ const [a,b]=repRange(); return loadC().filter(c=>c.createdAt>=a&&c.createdAt<=b&&(!rep.dept||deptOf(c)===rep.dept)&&(!rep.cat||c.category===rep.cat)); }
+  function renderReport(){
+    $('repFrom').value=rep.from; $('repTo').value=rep.to; $('repDept').value=rep.dept; $('repCat').value=rep.cat;
+    const [a,b]=repRange();
+    if(isNaN(a)||isNaN(b)||a>b){ $('repBody').innerHTML='<div class="empty"><b>Invalid date range</b><span>"From" date must be on or before "To" date.</span></div>'; return; }
+    const l=repList(), s=stats(l);
+    const months=[]; for(let d=new Date(new Date(a).getFullYear(),new Date(a).getMonth(),1); d.getTime()<=b && months.length<36; d=new Date(d.getFullYear(),d.getMonth()+1,1)) months.push(d);
+    const monthRows=months.map(m=>{ const k=m.getFullYear()+'-'+String(m.getMonth()+1).padStart(2,'0'); return statRow(m.toLocaleDateString('en-IN',{month:'short',year:'numeric'}),l.filter(c=>monthKey(c.createdAt)===k)); });
+    const priRows=Object.entries(PRI).map(([k,v])=>statRow(v,l.filter(c=>pri(c)===k)));
+    const staffRows=loadS().map(st=>{ const m=l.filter(c=>c.assignedTo===st.id); if(!m.length) return null; const x=stats(m); return [esc(st.name),esc(st.dept),x.total,x.resolved,x.pending+x.review,fmtHours(x.avg)]; }).filter(Boolean);
+    const un=l.filter(c=>!c.assignedTo); if(un.length) staffRows.push(['Unassigned','—',un.length,un.filter(c=>c.status==='resolved').length,un.filter(c=>c.status!=='resolved').length,'—']);
+    const sorted=l.slice().sort((x,z)=>z.createdAt-x.createdAt), shown=sorted.slice(0,100);
+    const listRows=shown.map(c=>[c.id,esc(c.title),esc(c.category),esc(deptOf(c)),PRI[pri(c)],status[c.status].label,shortD(c.createdAt),c.resolvedAt?fmtHours(resHours(c)):'—']);
+    $('repBody').innerHTML=
+      sectionHTML('Overview',`<div class="sub" style="margin:-4px 0 12px;font-size:12px;color:var(--ink-soft)">${fmtDate(a)} – ${fmtDate(b)}${rep.dept?' · '+esc(rep.dept):''}${rep.cat?' · '+esc(rep.cat):''}</div>${kpis(s)}`)+
+      sectionHTML('Month-wise',rtable(['Month',...STAT_HEAD.slice(1)],monthRows))+
+      sectionHTML('Week-wise',rtable(['Week',...STAT_HEAD.slice(1)],weekRows(l,a,b)))+
+      sectionHTML('Department-wise',rtable(['Department',...STAT_HEAD.slice(1)],deptRows(l)))+
+      sectionHTML('Category-wise',rtable(['Category',...STAT_HEAD.slice(1)],catRows(l)))+
+      sectionHTML('Priority-wise',rtable(['Priority',...STAT_HEAD.slice(1)],priRows))+
+      sectionHTML('Staff-wise',rtable(['Staff','Dept','Assigned','Resolved','Open','Avg time'],staffRows))+
+      sectionHTML('Complaints ('+l.length+')',rtable(['ID','Title','Category','Department','Priority','Status','Date','Time'],listRows,shown.map(c=>c.id))+(l.length>100?'<p style="font-size:12px;color:var(--ink-soft);margin:10px 0 0">Showing latest 100 — download CSV for the full list.</p>':''));
+  }
+  $('repFrom').onchange=e=>{ rep.from=e.target.value; renderReport(); };
+  $('repTo').onchange=e=>{ rep.to=e.target.value; renderReport(); };
+  $('repDept').onchange=e=>{ rep.dept=e.target.value; renderReport(); };
+  $('repCat').onchange=e=>{ rep.cat=e.target.value; renderReport(); };
+  $('repQuick').onclick=e=>{ const q=e.target.closest('[data-q]'); if(!q) return; const n=new Date(); let f=n,t=n;
+    if(q.dataset.q==='month') f=new Date(n.getFullYear(),n.getMonth(),1);
+    else if(q.dataset.q==='last'){ f=new Date(n.getFullYear(),n.getMonth()-1,1); t=new Date(n.getFullYear(),n.getMonth(),0); }
+    else if(q.dataset.q==='3m') f=new Date(n.getFullYear(),n.getMonth()-2,1);
+    else if(q.dataset.q==='6m') f=new Date(n.getFullYear(),n.getMonth()-5,1);
+    else { const all=loadC(); f=all.length?new Date(Math.min(...all.map(c=>c.createdAt))):new Date(n.getFullYear(),n.getMonth(),1); }
+    rep.from=ymd(f); rep.to=ymd(t); renderReport(); };
+  $('repBody').addEventListener('click',e=>{ const t=e.target.closest('tr[data-id]'); if(t) openDetail(t.dataset.id); });
+  $('repPrint').onclick=()=>window.print();
+  $('repCsv').onclick=()=>{
+    const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const rows=[['ID','Title','Category','Department','Priority','Status','Assigned To','Created','Resolved','Resolution Time']];
+    repList().forEach(c=>rows.push([c.id,c.title,c.category,deptOf(c),PRI[pri(c)],status[c.status].label,staffName(c.assignedTo),new Date(c.createdAt).toLocaleString('en-IN'),c.resolvedAt?new Date(c.resolvedAt).toLocaleString('en-IN'):'',fmtHours(resHours(c))]));
+    const blob=new Blob(['\ufeff'+rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='campusfix_report_'+rep.from+'_to_'+rep.to+'.csv';
+    document.body.appendChild(a); a.click(); a.remove(); toast('Report exported');
+  };
+
+  $('logoutBtn').addEventListener('click',async()=>{
+    closeDrawer();
+    if(await ask({title:'Log out?',text:"You'll need to sign in again to access the Admin dashboard.",ok:'Logout',cancel:'Stay'})){
+      window.location.href = LOGIN_URL;
+    }
+  });
+
+  let tt;
+  function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),2400); }
+
+  // Backend (Flask, app.py) endpoints used by this page:
+  //   GET  /api/hod/complaints              POST /api/hod/complaints/<id>  {priority | assignedTo | status}
+  //   POST /api/hod/complaints/<id>/resolve {photo, report}                 DELETE /api/hod/complaints/<id>
+  //   GET/POST /api/hod/staff               POST/DELETE /api/hod/staff/<id>   POST /api/hod/staff/<id>/reset-password
+  //   GET /api/hod/profile                  POST /api/hod/update-profile      POST /api/update-photo
+  // Only the theme (campusfix_theme) and the notification read-list (cf_notif_read) stay in this browser.
+
+  // ============ NOTIFICATIONS ============
+  var nOpen=false;
+  function loadNR(){ try{ return JSON.parse(localStorage.getItem('cf_notif_read'))||[]; }catch(e){ return []; } }
+  function saveNR(a){ try{ localStorage.setItem('cf_notif_read',JSON.stringify(a.slice(-400))); }catch(e){} }
+  function relT(ts){ const m=Math.max(0,Math.round((Date.now()-ts)/60000)); if(m<1) return 'Just now'; if(m<60) return m+'m ago'; const h=Math.round(m/60); if(h<24) return h+'h ago'; return Math.round(h/24)+'d ago'; }
+  function buildNotifs(){
+    const now=Date.now(), out=[], W=7*864e5;
+    loadC().forEach(c=>{
+      if(c.status==='resolved'){ if(c.resolvedAt&&now-c.resolvedAt<W) out.push({k:'res:'+c.id+':'+c.resolvedAt,t:'ok',id:c.id,ts:c.resolvedAt,title:'Complaint resolved',msg:c.title}); return; }
+      if(c.status==='submitted'&&now-c.createdAt<W) out.push({k:'new:'+c.id,t:'new',id:c.id,ts:c.createdAt,title:c.assignedTo?'New complaint received':'New complaint — needs assignment',msg:c.title});
+      if(isOverdue(c)) out.push({k:'od:'+c.id,t:'od',id:c.id,ts:c.createdAt+SLA_H*36e5,title:'Overdue — open for over '+SLA_H+'h',msg:c.title});
+      if(pri(c)==='urgent'||pri(c)==='high'){ const pl=(c.log||[]).filter(l=>/^Priority/.test(l.msg)).pop(); out.push({k:'pri:'+c.id+':'+pri(c),t:'pri',id:c.id,ts:pl?pl.t:c.createdAt,title:PRI[pri(c)]+' priority — still open',msg:c.title}); }
+    });
+    return out.sort((a,b)=>b.ts-a.ts).slice(0,40);
+  }
+  function nIcon(t){ const P={new:'<path d="M12 5v14M5 12h14"/>',od:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',pri:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>',ok:'<path d="M5 13l4 4L19 7"/>'}; return `<svg class="ic" viewBox="0 0 24 24">${P[t]}</svg>`; }
+  function renderNotifList(){
+    const rd=loadNR(), L=buildNotifs();
+    $('nList').innerHTML=L.length?L.map(n=>`<button class="ni ${rd.includes(n.k)?'':'unread'}" data-k="${esc(n.k)}" data-id="${esc(n.id)}"><span class="nic ${n.t}">${nIcon(n.t)}</span><span class="nt"><b>${esc(n.title)}</b><span>${esc(n.msg)}</span><small>${relT(n.ts)}</small></span></button>`).join(''):'<div class="n-empty">You are all caught up</div>';
+  }
+  function renderNotifBadge(){
+    const rd=loadNR(), n=buildNotifs().filter(x=>!rd.includes(x.k)).length, b=$('nBadge');
+    b.textContent=n>99?'99+':n; b.style.display=n?'flex':'none'; $('bellBtn').classList.toggle('ring',n>0);
+    if(nOpen) renderNotifList();
+  }
+  function setNotif(open){ nOpen=open; $('notifPanel').classList.toggle('show',open); if(open) renderNotifList(); }
+  $('bellBtn').addEventListener('click',e=>{ e.stopPropagation(); setNotif(!nOpen); });
+  $('notifPanel').addEventListener('click',e=>{
+    e.stopPropagation();
+    const it=e.target.closest('.ni'); if(!it) return;
+    const rd=loadNR(); if(!rd.includes(it.dataset.k)){ rd.push(it.dataset.k); saveNR(rd); }
+    setNotif(false); renderNotifBadge(); openDetail(it.dataset.id);
+  });
+  $('nReadAll').addEventListener('click',()=>{ saveNR(loadNR().concat(buildNotifs().map(n=>n.k))); renderNotifBadge(); renderNotifList(); });
+  document.addEventListener('click',()=>{ if(nOpen) setNotif(false); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&nOpen) setNotif(false); });
+  setInterval(renderNotifBadge,60000);
+
+  // ============ START + LIVE SYNC ============
+  const dataSig=()=>complaintsCache.map(c=>[c.id,c.status,c.priority,c.assignedTo,c.resolvedAt,c.rating,(c.log||[]).length].join('|')).join(';')+'#'+staffCache.map(s=>[s.id,s.active,s.name,s.dept,s.role].join('|')).join(';');
+  async function syncNow(){
+    if(document.hidden) return;
+    const before=dataSig();
+    await Promise.all([fetchC(),fetchS()]);
+    if(dataSig()!==before) refreshAll();
+  }
+  renderHod();
+  $('heroSub').textContent='Loading complaints…';
+  (async()=>{
+    const res=await Promise.all([fetchProfile(),fetchC(),fetchS()]);
+    if(res.includes(false)) toast(serverDown?'Server connection failed':'Could not load some data');
+    renderHod(); renderOverview(); window.__nReady=true; renderNotifBadge();
+  })();
+  setInterval(syncNow,30000);                                   // pick up new student complaints
+  document.addEventListener('visibilitychange',syncNow);        // refresh when the tab is opened again
+</script>
+</body>
+</html>

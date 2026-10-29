@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CampusFix — Student Portal Access</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green-950:#062018;
+    --green-900:#0b3d2b;
+    --green-800:#0e4d36;
+    --green-700:#13603f;
+    --saffron:#e08a1e;
+    --saffron-dark:#c56f0f;
+    --cream:#f8f6ef;
+    --paper:#ffffff;
+    --ink:#10241c;
+    --ink-soft:#5b6b63;
+    --line:#e3e0d4;
+    --ok:#1b8a4b;
+    --err:#c4372f;
+    --ff-head:'Plus Jakarta Sans', sans-serif;
+    --ff-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;max-width:100%;}
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+  body{
+    font-family:var(--ff-body);
+    background:var(--cream);
+    color:var(--ink);
+    min-height:100vh;
+    min-height:100dvh;
+    overflow-x:hidden;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  img{max-width:100%;}
+  .shell{
+    display:grid;
+    grid-template-columns:1.05fr 1fr;
+    min-height:100vh;
+    min-height:100dvh;
+  }
+
+  /* ---------- LEFT / BRAND PANEL ---------- */
+  .brand{
+    position:relative;
+    background:
+      radial-gradient(circle at 15% 20%, rgba(224,138,30,.35), transparent 45%),
+      radial-gradient(circle at 85% 80%, rgba(19,96,63,.55), transparent 50%),
+      linear-gradient(160deg, var(--green-950), var(--green-800) 70%);
+    color:#fdfcf8;
+    padding:clamp(24px,5vw,56px) clamp(20px,5vw,56px) clamp(24px,4vw,40px);
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    overflow:hidden;
+  }
+  .brand::before{
+    content:'';position:absolute;inset:-45%;z-index:0;
+    background:conic-gradient(from 0deg, rgba(224,138,30,.14), transparent 28%, rgba(255,255,255,.06) 45%, transparent 68%, rgba(19,96,63,.18) 85%, rgba(224,138,30,.14));
+    animation:rotateAurora 26s linear infinite;
+  }
+  @keyframes rotateAurora{to{transform:rotate(360deg);}}
+  .particles{position:absolute;inset:0;overflow:hidden;z-index:1;pointer-events:none;}
+  .particle{position:absolute;bottom:-10px;border-radius:50%;background:rgba(255,255,255,.4);animation-name:floatUp;animation-timing-function:linear;animation-iteration-count:infinite;}
+  @keyframes floatUp{
+    0%{transform:translateY(0) translateX(0);opacity:0;}
+    12%{opacity:.65;}
+    88%{opacity:.35;}
+    100%{transform:translateY(-640px) translateX(var(--drift,18px));opacity:0;}
+  }
+  @media (prefers-reduced-motion: reduce){ .brand::before, .particle{animation:none;} }
+  .blob{
+    position:absolute;
+    border-radius:50%;
+    filter:blur(2px);
+    opacity:.18;
+    background:var(--saffron);
+    animation:drift 16s ease-in-out infinite;
+  }
+  .blob.b1{width:340px;height:340px;top:-90px;right:-80px;animation-delay:0s;}
+  .blob.b2{width:220px;height:220px;bottom:-60px;left:-60px;background:#fff;opacity:.08;animation-delay:-6s;}
+  .blob.b3{width:140px;height:140px;top:45%;right:10%;background:#fff;opacity:.06;animation-delay:-11s;}
+  @keyframes drift{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%{transform:translate(-18px,22px) scale(1.08);}
+  }
+  @media (prefers-reduced-motion: reduce){ .blob{animation:none;} }
+
+  .brand-top{position:relative;z-index:2;display:flex;align-items:center;gap:14px;opacity:0;animation:riseIn .8s .1s ease-out forwards;}
+  .full-banner-logo{
+    height:clamp(40px,7vw,56px);width:auto;object-fit:contain;border-radius:8px;
+    background:#fff;padding:4px 6px;
+    box-shadow:0 8px 20px rgba(0,0,0,.35);
+    animation:breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe{0%,100%{transform:scale(1);}50%{transform:scale(1.04);}}
+
+  .brand-mid{position:relative;z-index:2;max-width:420px;margin-top:clamp(24px,5vw,48px);}
+  .brand-mid h1{
+    font-family:var(--ff-head);
+    font-size:clamp(26px,4.5vw,44px);line-height:1.1;font-weight:800;margin:0 0 18px;
+    opacity:0;animation:riseIn .8s .25s ease-out forwards;
+  }
+  .brand-mid h1 em{
+    font-style:normal;
+    background:linear-gradient(90deg,var(--saffron),#ffd28a,var(--saffron));
+    background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:shimmer 3.2s linear infinite;
+  }
+  @keyframes shimmer{to{background-position:-200% center;}}
+  .brand-mid p{
+    font-size:15.5px;line-height:1.6;color:#d7e6dc;margin:0;
+    opacity:0;animation:riseIn .8s .4s ease-out forwards;
+  }
+  @keyframes riseIn{
+    from{opacity:0;transform:translateY(14px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+
+  .brand-steps{
+    position:relative;z-index:2;display:flex;flex-direction:column;gap:14px;margin-top:40px;
+  }
+  .brand-steps .step{
+    display:flex;align-items:center;gap:12px;font-size:13.5px;color:#eaf3ee;
+    opacity:0;animation:riseIn .6s ease-out forwards;
+  }
+  .brand-steps .step:nth-child(1){animation-delay:.55s;}
+  .brand-steps .step:nth-child(2){animation-delay:.68s;}
+  .brand-steps .step:nth-child(3){animation-delay:.81s;}
+  .brand-steps .dot{
+    width:7px;height:7px;border-radius:50%;background:var(--saffron);flex:none;
+    box-shadow:0 0 0 4px rgba(224,138,30,.18);
+    animation:pulseDot 2.4s ease-in-out infinite;
+  }
+  .brand-steps .step:nth-child(2) .dot{animation-delay:.3s;}
+  .brand-steps .step:nth-child(3) .dot{animation-delay:.6s;}
+  @keyframes pulseDot{0%,100%{box-shadow:0 0 0 4px rgba(224,138,30,.18);}50%{box-shadow:0 0 0 8px rgba(224,138,30,.06);}}
+
+  .brand-seal{
+    position:relative;z-index:2;align-self:center;margin-top:auto;
+    opacity:0;animation:riseIn .9s .5s ease-out forwards;
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+  }
+ .brand-seal img{
+    width:104px;
+    height:104px;
+    object-fit:contain;
+    animation: glowPulse 4s ease-in-out infinite;
+  }
+  @keyframes glowPulse {
+    0%, 100% {
+      transform: scale(1);
+      filter: drop-shadow(0 8px 16px rgba(224,138,30,0.25));
+    }
+    50% {
+      transform: scale(1.06);
+      filter: drop-shadow(0 14px 28px rgba(224,138,30,0.5));
+    }
+  }
+  .brand-seal span{font-size:11px;letter-spacing:.4px;color:#b9ccc0;}
+
+  /* ---------- RIGHT / FORM PANEL ---------- */
+  .panel{
+    display:flex;align-items:center;justify-content:center;
+    padding:clamp(20px,5vw,40px) clamp(14px,4vw,28px);background:var(--cream);
+    width:100%;min-width:0;
+  }
+  .card{
+    width:100%;max-width:420px;
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:22px;
+    padding: clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px);
+    box-shadow:0 24px 60px -30px rgba(11,61,43,.35);
+    opacity:0;transform:translateY(16px);
+    animation:cardIn .7s .15s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  @keyframes cardIn{to{opacity:1;transform:translateY(0);}}
+
+  .switcher{
+    position:relative;
+    display:grid;grid-template-columns:1fr 1fr;
+    background:#f1efe6;border-radius:999px;padding:4px;margin-bottom:26px;
+  }
+  .switcher .thumb{
+    position:absolute;top:4px;left:4px;
+    width:calc(50% - 4px);height:calc(100% - 8px);
+    background:var(--green-900);border-radius:999px;
+    transition:transform .5s cubic-bezier(.34,1.56,.64,1);
+    z-index:0;
+  }
+  .switcher.signup .thumb{transform:translateX(100%);}
+  .switcher button{
+    position:relative;z-index:1;
+    border:none;background:transparent;padding:10px 0;
+    font-family:var(--ff-head);font-weight:700;font-size:13.5px;letter-spacing:.2px;
+    color:var(--ink-soft);cursor:pointer;border-radius:999px;
+    transition:color .3s ease;
+  }
+  .switcher button.active{color:#fff;}
+
+  .heading{margin-bottom:22px;}
+  .heading h2{font-family:var(--ff-head);font-size:22px;margin:0 0 4px;font-weight:800;}
+  .heading p{margin:0;font-size:13px;color:var(--ink-soft);}
+
+  .forms{position:relative;}
+  .form-view{
+    display:none;
+  }
+  .form-view.active{display:block;animation:formSlide .45s cubic-bezier(.2,.8,.2,1);}
+  @keyframes formSlide{
+    from{opacity:0;transform:translateX(14px);}
+    to{opacity:1;transform:translateX(0);}
+  }
+  .stagger-in{opacity:0;transform:translateY(10px);animation:fieldIn .5s cubic-bezier(.2,.8,.2,1) forwards;}
+  @keyframes fieldIn{to{opacity:1;transform:translateY(0);}}
+
+  .ripple{position:absolute;border-radius:50%;background:rgba(0,0,0,.16);transform:scale(0);animation:rippleAnim .55s ease-out;pointer-events:none;}
+  @keyframes rippleAnim{to{transform:scale(2.6);opacity:0;}}
+
+  .field{margin-bottom:10px;}
+  .field label{
+    display:block;font-size:11.5px;font-weight:700;letter-spacing:.3px;
+    color:var(--ink);margin-bottom:6px;
+  }
+  .field label .req{color:var(--saffron-dark);}
+  .field .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .input-wrap{position:relative;}
+  input[type=text], input[type=password], input[type=email], select{
+    width:100%;max-width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);
+    font-family:var(--ff-body);font-size:16px;background:#fbfaf6;color:var(--ink);
+    outline:none;transition:border-color .2s ease, box-shadow .2s ease, background .2s ease, transform .2s ease;
+    appearance:none;
+  }
+  input[type=text]:focus, input[type=password]:focus, input[type=email]:focus{transform:translateY(-1px);}
+  select{cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%235b6b63' stroke-width='1.6' fill='none' fill-rule='evenodd'/></svg>");background-repeat:no-repeat;background-position:right 14px center;padding-right:34px;}
+  input:focus, select:focus{border-color:var(--green-700);box-shadow:0 0 0 4px rgba(19,96,63,.12);background:#fff;}
+  input.err-shake{animation:shake .4s;border-color:var(--err);}
+  @keyframes shake{
+    10%,90%{transform:translateX(-1px);}
+    20%,80%{transform:translateX(2px);}
+    30%,50%,70%{transform:translateX(-4px);}
+    40%,60%{transform:translateX(4px);}
+  }
+
+  .gmail-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .gmail-row input{flex:1 1 160px;min-width:0;}
+  .verify-btn{
+    position:relative;overflow:hidden;
+    flex:none;border:1.5px solid var(--green-800);background:#fff;color:var(--green-900);
+    font-family:var(--ff-head);font-weight:700;font-size:12.5px;padding:0 16px;border-radius:12px;
+    height:44px;
+    cursor:pointer;transition:all .25s ease;white-space:nowrap;
+    display:flex;align-items:center;gap:6px;
+  }
+  .verify-btn:hover{background:var(--green-900);color:#fff;transform:translateY(-2px);}
+  .verify-btn:disabled{cursor:default;opacity:.75;}
+  .verify-btn.sent{background:var(--ok);border-color:var(--ok);color:#fff;}
+  .verify-btn .spin{
+    width:13px;height:13px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.4);border-top-color:#fff;
+    animation:spin .7s linear infinite;display:none;
+  }
+  .verify-btn{
+    position:relative;overflow:hidden;
+    flex:none;border:1.5px solid var(--green-800);background:#fff;color:var(--green-900);
+    font-family:var(--ff-head);font-weight:700;font-size:12.5px;padding:0 16px;border-radius:12px;
+    height:44px;
+    cursor:pointer;transition:all .25s ease;white-space:nowrap;
+    display:flex;align-items:center;gap:6px;
+  }
+  .verify-btn:hover{background:var(--green-900);color:#fff;transform:translateY(-2px);}
+  .verify-btn:disabled{cursor:default;opacity:.75;}
+  .verify-btn.sent{background:var(--ok);border-color:var(--ok);color:#fff;}
+
+  /* Jab cursor nahi hai aur loading ho rahi hai */
+  .verify-btn.loading .spin{
+    display:inline-block;
+    border: 2px solid rgba(19, 96, 63, 0.2);
+    border-top-color: var(--green-800);
+  }
+  .verify-btn.loading .lbl{display:none;}
+
+  /* Jab loading ke dauran cursor button par aaye */
+  .verify-btn.loading:hover{
+    background: var(--green-900);
+    border-color: var(--green-900);
+  }
+  .verify-btn.loading:hover .spin{
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .email-ok{
+    display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ok);
+    margin-top:6px;font-weight:600;opacity:0;height:0;overflow:hidden;
+    transition:opacity .3s ease;
+  }
+  .email-ok.show{opacity:1;height:auto;margin-top:6px;}
+
+  .otp-block{
+    max-height:0;overflow:hidden;opacity:0;
+    transition:max-height .5s ease, opacity .4s ease, margin .4s ease;
+  }
+  .otp-block.show{max-height:220px;opacity:1;margin-bottom:16px;}
+  .otp-hint{font-size:12px;color:var(--ink-soft);margin-bottom:10px;}
+  .otp-hint b{color:var(--green-900);}
+  .otp-boxes{display:flex;gap:clamp(5px,1.8vw,8px);margin-bottom:12px;}
+  .otp-boxes input{
+    width:100%;min-width:0;text-align:center;padding:10px 0;font-size:clamp(15px,4vw,18px);font-weight:700;
+    letter-spacing:0;font-family:var(--ff-head);
+    opacity:0;transform:translateY(8px);
+    transition:border-color .2s ease, box-shadow .2s ease, transform .18s ease;
+  }
+  .otp-boxes input:focus{transform:scale(1.1);box-shadow:0 0 0 4px rgba(19,96,63,.15);}
+  .otp-block.show .otp-boxes input, .otp-boxes.show input{animation:otpIn .4s ease forwards;}
+  .otp-boxes input:nth-child(1){animation-delay:.05s;}
+  .otp-boxes input:nth-child(2){animation-delay:.1s;}
+  .otp-boxes input:nth-child(3){animation-delay:.15s;}
+  .otp-boxes input:nth-child(4){animation-delay:.2s;}
+  .otp-boxes input:nth-child(5){animation-delay:.25s;}
+  .otp-boxes input:nth-child(6){animation-delay:.3s;}
+  @keyframes otpIn{to{opacity:1;transform:translateY(0);}}
+  .otp-boxes input.correct{
+    border-color:var(--ok);color:var(--ok);background:#eefbf2;
+    animation:popGreen .45s ease;
+  }
+  @keyframes popGreen{
+    0%{transform:scale(1);}
+    40%{transform:scale(1.18);}
+    100%{transform:scale(1);}
+  }
+  .otp-boxes input.wrong{border-color:var(--err);animation:shake .4s;}
+
+  .otp-submit{
+    position:relative;overflow:hidden;
+    width:100%;padding:11px 0;border-radius:12px;border:none;
+    background:var(--saffron);color:#fff;font-family:var(--ff-head);font-weight:700;
+    font-size:13px;cursor:pointer;transition:filter .2s ease, transform .2s ease;
+  }
+  .otp-submit:hover{filter:brightness(1.06);transform:translateY(-2px);}
+  .otp-submit:active{transform:scale(.98);}
+  .otp-status{font-size:12px;margin-top:8px;height:16px;font-weight:600;}
+  .otp-status.ok{color:var(--ok);}
+  .otp-status.bad{color:var(--err);}
+
+  .pass-block{
+    max-height:0;overflow:hidden;opacity:0;
+    transition:max-height .5s ease, opacity .45s ease .05s;
+  }
+  .pass-block.show{max-height:220px;opacity:1;}
+
+  .pw-wrap{position:relative;}
+  .pw-wrap input{padding-right:42px;}
+  .pw-eye{
+    position:absolute;right:12px;top:50%;transform:translateY(-50%);
+    cursor:pointer;color:var(--ink-soft);user-select:none;font-size:13px;
+  }
+
+  .primary-btn{
+    position:relative;overflow:hidden;
+    width:100%;padding:13px 0;border-radius:12px;border:none;margin-top:4px;
+    background:var(--green-900);color:#fff;font-family:var(--ff-head);font-weight:700;
+    font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+    transition:filter .2s ease, transform .2s ease;
+  }
+  .primary-btn:hover:not(.locked){filter:brightness(1.12);transform:translateY(-2px);}
+  .primary-btn:active{transform:scale(.985);}
+  .primary-btn .spin{
+    width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.35);
+    border-top-color:#fff;animation:spin .7s linear infinite;display:none;
+  }
+  .primary-btn.loading .spin{display:inline-block;}
+  .primary-btn.loading .lbl{opacity:.85;}
+  .primary-btn.locked{opacity:.5;cursor:not-allowed;}
+
+  .foot-note{
+    text-align:center;font-size:12.5px;color:var(--ink-soft);margin-top:18px;
+  }
+  .foot-note a{color:var(--green-800);font-weight:700;text-decoration:none;cursor:pointer;}
+  .foot-note a:hover{text-decoration:underline;}
+
+  .forgot-row{text-align:right;margin-top:8px;}
+  .forgot-link{font-size:12px;color:var(--green-800);font-weight:700;cursor:pointer;}
+  .forgot-link:hover{text-decoration:underline;}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(6,32,24,.55);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:50;padding:20px;
+    opacity:0;transition:opacity .25s ease;
+  }
+  .modal-overlay.show{display:flex;opacity:1;}
+  .modal-card{
+    width:100%;max-width:380px;background:var(--paper);border-radius:20px;
+    padding:clamp(20px,6vw,28px) clamp(18px,6vw,26px) clamp(18px,5vw,26px);
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.5);
+    max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow-y:auto;
+    transform:scale(.9) translateY(10px);opacity:0;
+    transition:transform .35s cubic-bezier(.34,1.56,.64,1), opacity .3s ease;
+  }
+  .modal-overlay.show .modal-card{transform:scale(1) translateY(0);opacity:1;}
+  .modal-close{
+    float:right;cursor:pointer;color:var(--ink-soft);font-size:18px;line-height:1;
+    margin-top:-4px;transition:transform .2s ease, color .2s ease;
+  }
+  .modal-close:hover{color:var(--ink);transform:rotate(90deg);}
+  .modal-card h3{font-family:var(--ff-head);font-size:19px;margin:0 0 6px;font-weight:800;}
+  .modal-card p{font-size:13px;color:var(--ink-soft);margin:0 0 18px;line-height:1.5;}
+  .modal-body-reset.hide, .modal-body-sent.hide{display:none;}
+  .modal-sent-icon{
+    width:52px;height:52px;border-radius:50%;background:#eefbf2;color:var(--ok);
+    display:flex;align-items:center;justify-content:center;margin:4px auto 14px;
+    animation:popGreen .5s ease;
+  }
+
+  .success-flash{
+    display:none;align-items:center;gap:10px;background:#eefbf2;border:1px solid #bfe8cf;
+    color:var(--ok);padding:12px 14px;border-radius:12px;font-size:13px;font-weight:600;
+    margin-top:16px;animation:riseIn .4s ease;
+  }
+  .success-flash.show{display:flex;}
+  .check-circle{
+    width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;flex:none;
+    animation:popGreen .4s ease;
+  }
+  .check-circle .tick{stroke-dasharray:20;stroke-dashoffset:20;}
+  .success-flash.show .check-circle .tick{animation:drawTick .45s ease forwards .12s;}
+  @keyframes drawTick{to{stroke-dashoffset:0;}}
+
+  /* ---------- Large tablets / small laptops ---------- */
+  @media (max-width:1100px){
+    .brand-mid h1{font-size:clamp(24px,3.6vw,38px);}
+    .brand-mid p{font-size:14.5px;}
+  }
+
+  /* ---------- Tablets & below: stack brand + form ---------- */
+  @media (max-width:900px){
+    .shell{grid-template-columns:1fr;min-height:auto;}
+    .brand{padding:36px 26px 90px;min-height:auto;flex-shrink:0;}
+    .brand-mid{margin-top:32px;}
+    .brand-mid h1{font-size:clamp(26px,6vw,32px);}
+    .brand-steps{display:none;}
+    .brand-seal{margin-top:22px;}
+    .panel{padding:0 20px 50px;margin-top:-56px;}
+    .card{border-radius:24px 24px 22px 22px;}
+  }
+
+  /* ---------- Phones ---------- */
+  @media (max-width:560px){
+    .brand{padding:28px 20px 80px;}
+    .brand-top{gap:10px;}
+    .full-banner-logo{height:40px;}
+    .brand-mid{margin-top:26px;}
+    .brand-mid h1{font-size:24px;}
+    .brand-mid p{font-size:13.5px;}
+    .brand-seal img{width:80px;height:80px;}
+    .panel{padding:0 14px 40px;margin-top:-48px;}
+    .card{padding:22px 18px 20px;border-radius:20px;}
+    .heading h2{font-size:19px;}
+    .switcher button{font-size:12.5px;padding:9px 0;}
+    .field .row2{grid-template-columns:1fr;gap:16px;}
+    .otp-hint{font-size:11.5px;}
+    .modal-card{max-width:100%;}
+  }
+
+  /* ---------- Very small phones ---------- */
+  @media (max-width:360px){
+    .brand{padding:22px 16px 70px;}
+    .brand-mid h1{font-size:21px;}
+    .card{padding:18px 14px 18px;}
+    .otp-boxes{gap:5px;}
+    .gmail-row{gap:6px;}
+    .verify-btn{padding:0 12px;font-size:11.5px;}
+  }
+
+  /* ---------- Short viewports (landscape phones, small laptops) ---------- */
+  @media (max-height:640px) and (max-width:900px){
+    .brand{padding-bottom:60px;min-height:auto;}
+    .brand-steps{display:none;}
+    .brand-seal{display:none;}
+    .panel{margin-top:-30px;padding-bottom:30px;}
+  }
+
+  /* ---------- Landscape phones (wide but short) ---------- */
+  @media (max-width:900px) and (orientation:landscape){
+    .shell{grid-template-columns:1fr 1fr;}
+    .brand{padding:24px;min-height:100vh;min-height:100dvh;}
+    .brand-steps{display:flex;}
+    .panel{margin-top:0;padding:20px;}
+    .card{max-height:96vh;overflow-y:auto;}
+  }
+  .role-pick{display:flex;gap:6px;padding:4px;margin-bottom:16px;border-radius:12px;background:rgba(14,77,54,.08);}
+  .role-pick button{flex:1;padding:9px 10px;border:0;border-radius:9px;background:transparent;color:var(--ink-soft);font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:background .25s,color .25s,box-shadow .25s;}
+  .role-pick button.active{background:var(--green-800);color:#fff;box-shadow:0 2px 8px rgba(14,77,54,.25);}
+  .login-err{min-height:18px;margin:8px 0 0;font-size:12.5px;font-weight:600;color:var(--err);}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- BRAND PANEL -->
+  <div class="brand">
+    <div class="particles" id="particles"></div>
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+
+    <div class="brand-top">
+      <img class="full-banner-logo" src="static/Icon1.jpg">
+    </div>
+
+    <div class="brand-mid">
+      <h1>Complaints, <em>sorted</em> — not shouted about.</h1>
+      <p>CampusFix routes every hostel, mess and academic complaint to the right warden, predicts its priority with ML, and keeps you posted till it's closed.</p>
+    </div>
+
+    <div class="brand-steps">
+      <div class="step"><span class="dot"></span> Verify your college Gmail once, sign in forever</div>
+      <div class="step"><span class="dot"></span> AI auto-tags category &amp; urgency of every complaint</div>
+      <div class="step"><span class="dot"></span> Track resolution status in real time</div>
+    </div>
+    <div style="margin-top: 32px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px 20px; backdrop-filter: blur(8px); opacity: 0; animation: riseIn .8s 1s ease-out forwards; max-width: 380px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+    <span style="font-size: 11.5px; font-weight: 700; letter-spacing: .5px; color: #b9ccc0; text-transform: uppercase;">AI Core &amp; Dept Routing</span>
+    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #22c55e; font-weight: 600;">
+      <span style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e;"></span> Operational
+    </span>
+  </div>
+  
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px;">
+    <div style="background: rgba(255,255,255,0.04); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+      <div style="color: var(--saffron); font-weight: 700; font-size: 13px;">Auto-NLP</div>
+      <div style="color: #b9ccc0; font-size: 11px;">Keyword Tagging</div>
+    </div>
+    <div style="background: rgba(255,255,255,0.04); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+      <div style="color: #ffd28a; font-weight: 700; font-size: 13px;">Direct-Warden</div>
+      <div style="color: #b9ccc0; font-size: 11px;">Zero Delay Node</div>
+    </div>
+  </div>
+</div>
+
+  </div>
+
+  <!-- FORM PANEL -->
+  <div class="panel">
+    <div class="card">
+          <div class="brand-seal">
+      <img src="static/campusfix_logo.png">
+      <span>LOGIN PORTAL · CAMPUSFIX</span>
+    </div>
+
+      <div class="switcher" id="switcher">
+        <div class="thumb"></div>
+        <button type="button" class="active" id="tabLogin">Log In</button>
+        <button type="button" id="tabSignup">Sign Up</button>
+      </div>
+
+      <div class="forms">
+
+        <!-- LOGIN -->
+        <div class="form-view active" id="viewLogin">
+          <div class="heading">
+            <h2>Welcome back</h2>
+            <p>Students, staff and admins all log in here</p>
+          </div>
+
+          <form id="loginForm" method="POST" action="/login" novalidate>
+            <div class="field">
+              <label>Gmail or Roll Number <span class="req">*</span></label>
+              <input type="text" id="loginId" name="login_id" placeholder="e.g. yourname@gmail.com or 220101" required>
+            </div>
+            <div class="field">
+              <label>Password <span class="req">*</span></label>
+              <div class="pw-wrap">
+                <input type="password" id="loginPass" name="password" placeholder="Enter your password" required>
+                <span class="pw-eye" data-target="loginPass">show</span>
+              </div>
+              <div class="forgot-row"><span class="forgot-link" id="openForgot">Forgot password?</span></div>
+            </div>
+            <div class="login-err" id="loginErr" role="alert"></div>
+            <button type="submit" class="primary-btn" id="loginBtn">
+              <span class="spin"></span><span class="lbl">Log In to Portal</span>
+            </button>
+            <div class="success-flash" id="loginSuccess">
+              <span class="check-circle"><svg width="12" height="12" viewBox="0 0 24 24"><polyline class="tick" points="4 12 9 17 20 6" fill="none" stroke="white" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Logged in — redirecting to your dashboard…
+            </div>
+          </form>
+          <div class="foot-note">New to CampusFix? <a id="goSignup">Create an account</a></div>
+        </div>
+
+        <!-- SIGNUP -->
+        <div class="form-view" id="viewSignup">
+          <div class="heading">
+            <h2>Create your account</h2>
+            <p>Register with your details to raise &amp; track complaints</p>
+          </div>
+
+          <form id="signupForm" method="POST" action="/signup" novalidate>
+            <div class="field">
+              <label>Full Name <span class="req">*</span></label>
+              <input type="text" id="suName" name="name" placeholder="e.g. Suhail Ahmad" required>
+            </div>
+
+            <div class="field row2">
+              <div>
+                <label>Roll Number <span class="req">*</span></label>
+                <input type="text" id="suRoll" name="roll_no" placeholder="e.g. 220101" required>
+              </div>
+              <div>
+                <label>Class / Branch <span class="req">*</span></label>
+                <input type="text" id="suClass" name="course" placeholder="e.g. B.Tech CSE" required>
+              </div>
+            </div>
+
+            <div class="field">
+              <label>Year <span class="req">*</span></label>
+              <select id="suYear" name="year" required>
+                <option value="" disabled selected>Select year</option>
+                <option>1st Year</option>
+                <option>2nd Year</option>
+                <option>3rd Year</option>
+                <option>4th Year</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label>College Gmail <span class="req">*</span></label>
+              <div class="gmail-row">
+                <input type="email" id="suGmail" name="email" placeholder="yourname@gmail.com" required>
+                <button type="button" class="verify-btn" id="verifyBtn">
+                  <span class="spin"></span><span class="lbl">Verify</span>
+                </button>
+              </div>
+              <div class="email-ok" id="emailOk">✓ OTP sent to your Gmail</div>
+            </div>
+
+            <div class="otp-block" id="otpBlock">
+              <div class="otp-hint">Enter the 6-digit OTP sent to your Gmail.</div>
+              <div class="otp-boxes" id="otpBoxes">
+                <input inputmode="numeric" maxlength="1">
+                <input inputmode="numeric" maxlength="1">
+                <input inputmode="numeric" maxlength="1">
+                <input inputmode="numeric" maxlength="1">
+                <input inputmode="numeric" maxlength="1">
+                <input inputmode="numeric" maxlength="1">
+              </div>
+              <button type="button" class="otp-submit" id="otpSubmit">Submit OTP</button>
+              <div class="otp-status" id="otpStatus"></div>
+            </div>
+
+            <div class="pass-block" id="passBlock">
+              <div class="field">
+                <label>Create Password <span class="req">*</span></label>
+                <div class="pw-wrap">
+                  <input type="password" id="suPass" name="password" placeholder="Minimum 6 characters">
+                  <span class="pw-eye" data-target="suPass">show</span>
+                </div>
+              </div>
+              <div class="field">
+                <label>Confirm Password <span class="req">*</span></label>
+                <div class="pw-wrap">
+                  <input type="password" id="suPass2" placeholder="Re-enter password">
+                  <span class="pw-eye" data-target="suPass2">show</span>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" class="primary-btn locked" id="signupBtn" disabled>
+              <span class="spin"></span><span class="lbl">Verify Gmail to continue</span>
+            </button>
+            <div class="login-err" id="signupErr" role="alert"></div>
+            <div class="success-flash" id="signupSuccess">
+              <span class="check-circle"><svg width="12" height="12" viewBox="0 0 24 24"><polyline class="tick" points="4 12 9 17 20 6" fill="none" stroke="white" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Account created — you can log in now.
+            </div>
+          </form>
+          <div class="foot-note">Already registered? <a id="goLogin">Log in</a></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div class="modal-overlay" id="forgotOverlay">
+  <div class="modal-card">
+    <span class="modal-close" id="closeForgot">✕</span>
+
+    <!-- Step 1: identify account -->
+    <div id="forgotStep1">
+      <h3>Reset your password</h3>
+      <p>Enter your Gmail or roll number — we'll send an OTP to your registered Gmail.</p>
+      <div class="field">
+        <label>Gmail or Roll Number <span class="req">*</span></label>
+        <input type="text" id="forgotId" placeholder="e.g. yourname@gmail.com or 220101">
+      </div>
+      <button type="button" class="primary-btn" id="forgotSendBtn">
+        <span class="spin"></span><span class="lbl">Send OTP</span>
+      </button>
+      <div class="otp-status" id="forgotIdStatus"></div>
+    </div>
+
+    <!-- Step 2: enter OTP -->
+    <div id="forgotStep2" style="display:none;">
+      <h3>Enter OTP</h3>
+      <p>If an account matches, we've sent a 6-digit OTP to its registered Gmail (valid for 5 minutes). <b id="forgotDemoHint" style="color:var(--green-900);"></b></p>
+      <div class="otp-boxes show" id="forgotOtpBoxes">
+        <input inputmode="numeric" maxlength="1">
+        <input inputmode="numeric" maxlength="1">
+        <input inputmode="numeric" maxlength="1">
+        <input inputmode="numeric" maxlength="1">
+        <input inputmode="numeric" maxlength="1">
+        <input inputmode="numeric" maxlength="1">
+      </div>
+      <button type="button" class="primary-btn" id="forgotOtpSubmit">
+        <span class="spin"></span><span class="lbl">Verify OTP</span>
+      </button>
+      <div class="otp-status" id="forgotOtpStatus"></div>
+    </div>
+
+    <!-- Step 3: new password -->
+    <div id="forgotStep3" style="display:none;">
+      <h3>Set new password</h3>
+      <p>OTP verified. Choose a new password for your account.</p>
+      <div class="field">
+        <label>New Password <span class="req">*</span></label>
+        <div class="pw-wrap">
+          <input type="password" id="forgotPass1" placeholder="Minimum 6 characters">
+          <span class="pw-eye" data-target="forgotPass1">show</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirm New Password <span class="req">*</span></label>
+        <div class="pw-wrap">
+          <input type="password" id="forgotPass2" placeholder="Re-enter new password">
+          <span class="pw-eye" data-target="forgotPass2">show</span>
+        </div>
+      </div>
+      <button type="button" class="primary-btn" id="forgotPassSubmit">
+        <span class="spin"></span><span class="lbl">Update Password</span>
+      </button>
+      <div class="otp-status" id="forgotPassStatus"></div>
+    </div>
+
+    <!-- Step 4: done -->
+    <div id="forgotStep4" style="display:none;text-align:center;">
+      <div class="modal-sent-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24"><polyline points="4 12 9 17 20 6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>Password updated</h3>
+      <p>Your password has been changed successfully. You can log in now.</p>
+      <button type="button" class="primary-btn" id="backToLoginBtn"><span class="lbl">Back to Log In</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---------- floating particles (brand panel) ----------
+  const particlesWrap = document.getElementById('particles');
+  for(let i=0;i<16;i++){
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = 3 + Math.random()*4;
+    p.style.width = p.style.height = size+'px';
+    p.style.left = Math.random()*100+'%';
+    p.style.setProperty('--drift', (Math.random()*40-20)+'px');
+    p.style.animationDuration = (8 + Math.random()*10)+'s';
+    p.style.animationDelay = (Math.random()*10)+'s';
+    particlesWrap.appendChild(p);
+  }
+
+  // ---------- staggered field reveal ----------
+  function staggerFields(view){
+    const items = view.querySelectorAll('.field, .otp-block.show, .pass-block.show, .primary-btn, .foot-note');
+    items.forEach((el, i)=>{
+      el.classList.remove('stagger-in');
+      void el.offsetWidth; // restart animation
+      el.style.animationDelay = (i*0.06)+'s';
+      el.classList.add('stagger-in');
+    });
+  }
+
+  // ---------- button ripple ----------
+  function addRipple(e){
+    const btn = e.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    ripple.style.width = ripple.style.height = size+'px';
+    ripple.style.left = (e.clientX - rect.left - size/2)+'px';
+    ripple.style.top  = (e.clientY - rect.top - size/2)+'px';
+    btn.appendChild(ripple);
+    setTimeout(()=> ripple.remove(), 550);
+  }
+  document.querySelectorAll('.primary-btn, .verify-btn, .otp-submit').forEach(b=>{
+    b.addEventListener('click', addRipple);
+  });
+
+  // ---------- tab switching ----------
+  const switcher = document.getElementById('switcher');
+  const tabLogin = document.getElementById('tabLogin');
+  const tabSignup = document.getElementById('tabSignup');
+  const viewLogin = document.getElementById('viewLogin');
+  const viewSignup = document.getElementById('viewSignup');
+
+  function showLogin(){
+    switcher.classList.remove('signup');
+    tabLogin.classList.add('active'); tabSignup.classList.remove('active');
+    viewLogin.classList.add('active'); viewSignup.classList.remove('active');
+    staggerFields(viewLogin);
+  }
+  function showSignup(){
+    switcher.classList.add('signup');
+    tabSignup.classList.add('active'); tabLogin.classList.remove('active');
+    viewSignup.classList.add('active'); viewLogin.classList.remove('active');
+    staggerFields(viewSignup);
+  }
+  tabLogin.addEventListener('click', showLogin);
+  tabSignup.addEventListener('click', showSignup);
+  document.getElementById('goSignup').addEventListener('click', showSignup);
+  document.getElementById('goLogin').addEventListener('click', showLogin);
+  staggerFields(viewLogin); // initial entrance
+
+  // ---------- password show/hide ----------
+  document.querySelectorAll('.pw-eye').forEach(eye=>{
+    eye.addEventListener('click', ()=>{
+      const inp = document.getElementById(eye.dataset.target);
+      const isPass = inp.type === 'password';
+      inp.type = isPass ? 'text' : 'password';
+      eye.textContent = isPass ? 'hide' : 'show';
+    });
+  });
+
+  // ==========================================================
+  // NOTE FOR BACKEND (Flask) INTEGRATION:
+  // This is a front-end only demo of the OTP flow. Replace the
+  // two functions below — sendOtpToGmail() and verifyOtpOnServer() —
+  // with real fetch() calls to your Flask routes, e.g.:
+  //   POST /api/send-otp   { gmail }        -> server emails a real OTP (Flask-Mail / SMTP)
+  //   POST /api/verify-otp { gmail, otp }   -> server checks OTP, returns { ok: true/false }
+  // Keep the animation code (addClass/removeClass calls) as-is;
+  // just swap the fake setTimeout logic for real fetch responses.
+  // ==========================================================
+
+  let generatedOtp = null;
+  let emailVerified = false;
+
+  const verifyBtn   = document.getElementById('verifyBtn');
+  const suGmail      = document.getElementById('suGmail');
+  const emailOk      = document.getElementById('emailOk');
+  const otpBlock     = document.getElementById('otpBlock');
+  const otpBoxesWrap = document.getElementById('otpBoxes');
+  const otpInputs    = [...otpBoxesWrap.querySelectorAll('input')];
+  const otpSubmit    = document.getElementById('otpSubmit');
+  const otpStatus    = document.getElementById('otpStatus');
+  const passBlock    = document.getElementById('passBlock');
+  const signupBtn    = document.getElementById('signupBtn');
+  const signupErr    = document.getElementById('signupErr');
+  const demoOtpHint  = document.getElementById('demoOtpHint');
+
+async function sendOtpToGmail(gmail){
+    try {
+      const response = await fetch('/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: gmail })
+      });
+      const data = await response.json();
+      return { ok: !!data.success, message: data.message || 'Could not send the OTP.' };
+    } catch (_) {
+      return { ok: false, message: 'No connection to the server. Please try again.' };
+    }
+  }
+
+  async function verifyOtpOnServer(entered){
+    const response = await fetch('/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: suGmail.value, otp: entered })
+    });
+    const data = await response.json();
+    return data.success;
+  }
+
+  verifyBtn.addEventListener('click', async ()=>{
+    if(!suGmail.value || !suGmail.checkValidity()){
+      suGmail.classList.add('err-shake');
+      suGmail.focus();
+      setTimeout(()=>suGmail.classList.remove('err-shake'), 400);
+      return;
+    }
+    verifyBtn.classList.add('loading');
+    verifyBtn.disabled = true;
+    suGmail.readOnly = true;
+
+    const sent = await sendOtpToGmail(suGmail.value);
+
+    verifyBtn.classList.remove('loading');
+    if(!sent.ok){
+      verifyBtn.disabled = false;
+      suGmail.readOnly = false;
+      signupErr.textContent = sent.message;
+      return;
+    }
+    signupErr.textContent = '';
+    verifyBtn.classList.add('sent');
+    verifyBtn.querySelector('.lbl').textContent = 'Sent';
+    emailOk.classList.add('show');
+    otpBlock.classList.add('show');
+    staggerFields(viewSignup);
+    otpInputs[0].focus();
+  });
+
+  // OTP box auto-advance
+  otpInputs.forEach((inp, idx)=>{
+    inp.addEventListener('input', ()=>{
+      inp.value = inp.value.replace(/[^0-9]/g,'').slice(0,1);
+      inp.classList.remove('correct','wrong');
+      if(inp.value && idx < otpInputs.length - 1) otpInputs[idx+1].focus();
+    });
+    inp.addEventListener('keydown', (e)=>{
+      if(e.key === 'Backspace' && !inp.value && idx > 0) otpInputs[idx-1].focus();
+    });
+  });
+
+  otpSubmit.addEventListener('click', async ()=>{
+    const entered = otpInputs.map(i=>i.value).join('');
+    if(entered.length < 6){
+      otpInputs.forEach(i=>{ if(!i.value){ i.classList.add('wrong'); } });
+      otpStatus.textContent = 'Enter all 6 digits';
+      otpStatus.className = 'otp-status bad';
+      setTimeout(()=>otpInputs.forEach(i=>i.classList.remove('wrong')), 400);
+      return;
+    }
+    otpSubmit.disabled = true;
+    otpStatus.textContent = 'Checking…';
+    otpStatus.className = 'otp-status';
+
+    const ok = await verifyOtpOnServer(entered);
+
+    if(ok){
+      otpInputs.forEach((i, k)=> setTimeout(()=> i.classList.add('correct'), k*70));
+      otpStatus.textContent = '✓ Gmail verified successfully';
+      otpStatus.className = 'otp-status ok';
+      emailVerified = true;
+      setTimeout(()=>{
+        passBlock.classList.add('show');
+        signupBtn.disabled = false;
+        signupBtn.classList.remove('locked');
+        signupBtn.querySelector('.lbl').textContent = 'Create Account';
+        staggerFields(viewSignup);
+        document.getElementById('suPass').focus();
+      }, 500);
+    } else {
+      otpInputs.forEach(i=> i.classList.add('wrong'));
+      otpStatus.textContent = 'Incorrect OTP — try again';
+      otpStatus.className = 'otp-status bad';
+      setTimeout(()=>otpInputs.forEach(i=> i.classList.remove('wrong')), 450);
+      otpSubmit.disabled = false;
+    }
+  });
+// ---------- signup submit ----------
+  document.getElementById('signupForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    if(!emailVerified){ 
+      return; 
+    }
+
+    const p1 = document.getElementById('suPass').value;
+    const p2 = document.getElementById('suPass2').value;
+    if(p1.length < 6){
+      document.getElementById('suPass').classList.add('err-shake');
+      setTimeout(()=>document.getElementById('suPass').classList.remove('err-shake'), 400);
+      return;
+    }
+    if(p1 !== p2){
+      document.getElementById('suPass2').classList.add('err-shake');
+      setTimeout(()=>document.getElementById('suPass2').classList.remove('err-shake'), 400);
+      return;
+    }
+    signupErr.textContent = '';
+    signupBtn.classList.add('loading'); signupBtn.disabled = true;
+    try {
+      const res = await fetch('/signup', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(new FormData(this).entries()))
+      });
+      let d = {}; try { d = await res.json(); } catch (_) {}
+      if(res.ok && d.success){
+        document.getElementById('signupSuccess').classList.add('show');
+        setTimeout(()=>{ document.getElementById('signupSuccess').classList.remove('show'); document.getElementById('goLogin').click(); }, 1400);
+        return;
+      }
+      signupErr.textContent = d.message || 'Could not create the account. Please try again.';
+    } catch (_) {
+      signupErr.textContent = 'No connection to the server. Please try again.';
+    }
+    signupBtn.classList.remove('loading'); signupBtn.disabled = false;
+  });
+  const forgotOverlay   = document.getElementById('forgotOverlay');
+  const openForgot      = document.getElementById('openForgot');
+  const closeForgot     = document.getElementById('closeForgot');
+  const forgotStep1     = document.getElementById('forgotStep1');
+  const forgotStep2     = document.getElementById('forgotStep2');
+  const forgotStep3     = document.getElementById('forgotStep3');
+  const forgotStep4     = document.getElementById('forgotStep4');
+  const forgotId        = document.getElementById('forgotId');
+  const forgotSendBtn   = document.getElementById('forgotSendBtn');
+  const forgotDemoHint  = document.getElementById('forgotDemoHint');
+  const forgotOtpInputs = [...document.querySelectorAll('#forgotOtpBoxes input')];
+  const forgotOtpSubmit = document.getElementById('forgotOtpSubmit');
+  const forgotOtpStatus = document.getElementById('forgotOtpStatus');
+  const forgotPass1     = document.getElementById('forgotPass1');
+  const forgotPass2     = document.getElementById('forgotPass2');
+  const forgotPassSubmit= document.getElementById('forgotPassSubmit');
+  const backToLoginBtn  = document.getElementById('backToLoginBtn');
+
+  let forgotIdVal = '', forgotToken = null;
+  const forgotIdStatus = document.getElementById('forgotIdStatus');
+  const forgotPassStatus = document.getElementById('forgotPassStatus');
+  const forgotSteps = [forgotStep1, forgotStep2, forgotStep3, forgotStep4];
+  function showForgotStep(step){
+    forgotSteps.forEach(s=> s.style.display = 'none');
+    step.style.display = 'block';
+  }
+
+  function openForgotModal(){
+    forgotId.value = '';
+    forgotOtpInputs.forEach(i=>{ i.value=''; i.classList.remove('correct','wrong'); });
+    forgotPass1.value = ''; forgotPass2.value = '';
+    forgotOtpStatus.textContent = ''; forgotIdStatus.textContent = ''; forgotPassStatus.textContent = '';
+    forgotIdVal = ''; forgotToken = null;
+    showForgotStep(forgotStep1);
+    forgotOverlay.classList.add('show');
+  }
+  function closeForgotModal(){
+    forgotOverlay.classList.remove('show');
+  }
+  openForgot.addEventListener('click', openForgotModal);
+  closeForgot.addEventListener('click', closeForgotModal);
+  backToLoginBtn.addEventListener('click', closeForgotModal);
+  forgotOverlay.addEventListener('click', (e)=>{ if(e.target === forgotOverlay) closeForgotModal(); });
+
+  async function forgotApi(path, body){
+    try {
+      const r = await fetch(path, { method:'POST', credentials:'same-origin',
+        headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+      let d = {}; try { d = await r.json(); } catch(_) {}
+      return { ok: r.ok && d.success === true, msg: d.message || '', data: d };
+    } catch(_) {
+      return { ok:false, msg:'No connection to the server. Please try again.' };
+    }
+  }
+  const sendForgotOtp   = id => forgotApi('/api/forgot/send-otp', { id });
+  const verifyForgotOtp = otp => forgotApi('/api/forgot/verify-otp', { id: forgotIdVal, otp });
+
+  // Step 1 -> Step 2
+  forgotSendBtn.addEventListener('click', async ()=>{
+    if(!forgotId.value.trim()){
+      forgotId.classList.add('err-shake');
+      forgotId.focus();
+      setTimeout(()=>forgotId.classList.remove('err-shake'), 400);
+      return;
+    }
+    forgotIdStatus.textContent = '';
+    forgotSendBtn.classList.add('loading'); forgotSendBtn.disabled = true;
+    const sr = await sendForgotOtp(forgotId.value.trim());
+    forgotSendBtn.classList.remove('loading'); forgotSendBtn.disabled = false;
+    if(!sr.ok){
+      forgotIdStatus.textContent = sr.msg || 'Could not send the OTP. Please try again.';
+      forgotIdStatus.className = 'otp-status bad';
+      return;
+    }
+    forgotIdVal = forgotId.value.trim();
+    forgotDemoHint.textContent = '';
+    showForgotStep(forgotStep2);
+    forgotOtpInputs.forEach(i=>{ i.classList.remove('correct','wrong'); i.value=''; });
+    forgotOtpInputs[0].focus();
+  });
+
+  // OTP box auto-advance (reset flow)
+  forgotOtpInputs.forEach((inp, idx)=>{
+    inp.addEventListener('input', ()=>{
+      inp.value = inp.value.replace(/[^0-9]/g,'').slice(0,1);
+      inp.classList.remove('correct','wrong');
+      if(inp.value && idx < forgotOtpInputs.length - 1) forgotOtpInputs[idx+1].focus();
+    });
+    inp.addEventListener('keydown', (e)=>{
+      if(e.key === 'Backspace' && !inp.value && idx > 0) forgotOtpInputs[idx-1].focus();
+    });
+  });
+
+  // Step 2 -> Step 3
+  forgotOtpSubmit.addEventListener('click', async ()=>{
+    const entered = forgotOtpInputs.map(i=>i.value).join('');
+    if(entered.length < 6){
+      forgotOtpInputs.forEach(i=>{ if(!i.value) i.classList.add('wrong'); });
+      forgotOtpStatus.textContent = 'Enter all 6 digits';
+      forgotOtpStatus.className = 'otp-status bad';
+      setTimeout(()=>forgotOtpInputs.forEach(i=>i.classList.remove('wrong')), 400);
+      return;
+    }
+    forgotOtpSubmit.classList.add('loading');
+    forgotOtpStatus.textContent = 'Checking…';
+    forgotOtpStatus.className = 'otp-status';
+    const vr = await verifyForgotOtp(entered);
+    const ok = vr.ok;
+    if(ok) forgotToken = vr.data.token;
+    forgotOtpSubmit.classList.remove('loading');
+
+    if(ok){
+      forgotOtpInputs.forEach((i,k)=> setTimeout(()=> i.classList.add('correct'), k*70));
+      forgotOtpStatus.textContent = '✓ OTP verified';
+      forgotOtpStatus.className = 'otp-status ok';
+      setTimeout(()=> showForgotStep(forgotStep3), 500);
+    } else {
+      forgotOtpInputs.forEach(i=> i.classList.add('wrong'));
+      forgotOtpStatus.textContent = vr.msg || 'Incorrect OTP — try again';
+      forgotOtpStatus.className = 'otp-status bad';
+      setTimeout(()=>forgotOtpInputs.forEach(i=> i.classList.remove('wrong')), 450);
+    }
+  });
+
+  // Step 3 -> Step 4
+  forgotPassSubmit.addEventListener('click', async ()=>{
+    const p1 = forgotPass1.value, p2 = forgotPass2.value;
+    if(p1.length < 6){
+      forgotPass1.classList.add('err-shake');
+      setTimeout(()=>forgotPass1.classList.remove('err-shake'), 400);
+      return;
+    }
+    if(p1 !== p2){
+      forgotPass2.classList.add('err-shake');
+      setTimeout(()=>forgotPass2.classList.remove('err-shake'), 400);
+      return;
+    }
+    forgotPassStatus.textContent = '';
+    forgotPassSubmit.classList.add('loading'); forgotPassSubmit.disabled = true;
+    const rr = await forgotApi('/api/forgot/reset', { id: forgotIdVal, token: forgotToken, password: p1 });
+    forgotPassSubmit.classList.remove('loading'); forgotPassSubmit.disabled = false;
+    if(!rr.ok){
+      forgotPassStatus.textContent = rr.msg || 'Could not update the password. Please try again.';
+      forgotPassStatus.className = 'otp-status bad';
+      return;
+    }
+    forgotToken = null;
+    showForgotStep(forgotStep4);
+  });
+
+  // ---------- login: students, staff and admins use the same form ----------
+  (function(){
+    const form = document.getElementById('loginForm');
+    const idInp = document.getElementById('loginId');
+    const pwInp = document.getElementById('loginPass');
+    const btn = document.getElementById('loginBtn');
+    const err = document.getElementById('loginErr');
+
+    function shakeEl(el){ el.classList.add('err-shake'); el.focus(); setTimeout(() => el.classList.remove('err-shake'), 400); }
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      err.textContent = '';
+      const login_id = idInp.value.trim(), password = pwInp.value;
+      if (!login_id) { err.textContent = 'Enter your Gmail or roll number.'; shakeEl(idInp); return; }
+      if (!password) { err.textContent = 'Enter your password.'; shakeEl(pwInp); return; }
+      btn.classList.add('loading'); btn.disabled = true;
+      try {
+        const res = await fetch('/login', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ login_id, password })
+        });
+        let d = {}; try { d = await res.json(); } catch (_) {}
+        if (res.ok && d.success) { window.location.href = d.redirect || '/'; return; }
+        err.textContent = d.message || 'Login failed. Please try again.';
+      } catch (_) {
+        err.textContent = 'No connection to the server. Please try again.';
+      }
+      btn.classList.remove('loading'); btn.disabled = false;
+    });
+  })();
+</script>
+</body>
+</html>
