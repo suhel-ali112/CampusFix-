@@ -4,7 +4,7 @@ import json
 import os
 import re
 import secrets
-import smtplib
+import urllib.error
 import threading
 import time
 from collections import defaultdict, deque
@@ -59,6 +59,9 @@ app.config.update(
 SMTP_EMAIL = os.environ.get('SMTP_EMAIL', '')
 SMTP_APP_PASSWORD = os.environ.get('SMTP_APP_PASSWORD', '')
 REQUIRE_EMAIL_OTP = env_flag('REQUIRE_EMAIL_OTP', True)     # signup needs a verified email
+
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '').strip()
+BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', '').strip()
 
 ADMIN_DB_ROLES = {'hod', 'admin'}
 CATEGORIES = {'Hostel', 'Mess', 'Classroom', 'Electricity', 'Water', 'Wi-Fi', 'Cleanliness', 'Other'}
@@ -329,20 +332,52 @@ def render_any(names, **ctx):
 # Email
 # ======================================================================
 def send_email(to, subject, body, attachment=None):
-    if not SMTP_EMAIL or not SMTP_APP_PASSWORD:
-        raise RuntimeError('SMTP_EMAIL / SMTP_APP_PASSWORD are not configured')
-    msg = EmailMessage()
-    msg['Subject'] = subject
-    msg['From'] = SMTP_EMAIL
-    msg['To'] = to
-    msg.set_content(body)
+    if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
+        raise RuntimeError(
+            'BREVO_API_KEY / BREVO_SENDER_EMAIL are not configured'
+        )
+
+    payload = {
+        "sender": {
+            "name": "CampusFix",
+            "email": BREVO_SENDER_EMAIL
+        },
+        "to": [{"email": to}],
+        "subject": subject,
+        "textContent": body
+    }
+
     if attachment:
         raw, sub = attachment
-        msg.add_attachment(raw, maintype='image', subtype=sub, filename=f'fix.{sub}')
-    with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
-        server.starttls()
-        server.login(SMTP_EMAIL, SMTP_APP_PASSWORD)
-        server.send_message(msg)
+        payload["attachment"] = [{
+            "name": f"fix.{sub}",
+            "content": base64.b64encode(raw).decode("utf-8")
+        }]
+
+    data = json.dumps(payload).encode("utf-8")
+
+    req = urlrequest.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=data,
+        headers={
+            "api-key": BREVO_API_KEY,
+            "accept": "application/json",
+            "content-type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        with urlrequest.urlopen(req, timeout=15) as response:
+            if response.status not in (200, 201, 202):
+                raise RuntimeError(
+                    f"Brevo email failed: HTTP {response.status}"
+                )
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Brevo API error {e.code}: {error_body}"
+        ) from e
 
 
 def send_email_async(*args, **kwargs):
