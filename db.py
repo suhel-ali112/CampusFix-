@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import tempfile
 
 import mysql.connector
 from mysql.connector import Error, pooling
@@ -13,14 +14,48 @@ _pool = None
 _pool_lock = threading.Lock()
 
 
-def _ssl_options():
-    ca = os.getenv("DB_SSL_CA")
-    if ca:
-        return {"ssl_ca": ca, "ssl_verify_cert": True}
-    if os.getenv("DB_SSL", "").strip().lower() in ("1", "true", "yes", "on"):
-        return {"ssl_disabled": False}
-    return {}
 
+def _ssl_options():
+    ca_content = os.getenv("DB_SSL_CA_CONTENT", "").strip()
+
+    if ca_content:
+        import tempfile
+
+        ca_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".pem",
+            delete=False,
+            encoding="utf-8",
+        )
+        ca_file.write(ca_content)
+        ca_file.close()
+
+        return {
+            "ssl_ca": ca_file.name,
+            "ssl_verify_cert": True,
+        }
+
+    ca_path = os.getenv("DB_SSL_CA", "").strip()
+
+    if ca_path:
+        ca_path = os.path.abspath(ca_path)
+
+        if not os.path.isfile(ca_path):
+            raise FileNotFoundError(
+                f"MySQL CA certificate not found: {ca_path}"
+            )
+
+        return {
+            "ssl_ca": ca_path,
+            "ssl_verify_cert": True,
+        }
+
+    if os.getenv("DB_SSL", "").strip().lower() in (
+        "1", "true", "yes", "on"
+    ):
+        return {"ssl_disabled": False}
+
+    return {}
 
 def get_db_connection():
     """Pooled connection (conn.close() returns it to the pool). None on failure."""
