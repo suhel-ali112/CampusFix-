@@ -351,14 +351,6 @@
   .photo-box.has .photo-idle{display:none;}
   .photo-box.has .photo-preview{display:block;}
 
-  .loc-row{display:flex;gap:8px;}
-  .loc-row input{flex:1;}
-  .loc-btn{flex:none;width:50px;border-radius:13px;border:1.5px solid var(--brand);background:transparent;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .25s ease;}
-  .loc-btn:hover{background:var(--brand);color:#fff;}
-  .loc-btn svg{width:20px;height:20px;}
-  .loc-btn.loading svg{animation:pulse 1s ease-in-out infinite;}
-  @keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.3);}}
-
   .submit{
     width:100%;padding:15px;border:none;border-radius:15px;background:var(--brand);color:#fff;font-family:var(--ff-head);font-weight:800;font-size:15px;cursor:pointer;
     display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .25s ease,filter .25s ease;
@@ -1172,22 +1164,6 @@
   ['dragenter','dragover'].forEach(ev=>pb.addEventListener(ev,e=>{ e.preventDefault(); pb.classList.add('drag'); }));
   ['dragleave','drop'].forEach(ev=>pb.addEventListener(ev,e=>{ e.preventDefault(); pb.classList.remove('drag'); }));
   pb.addEventListener('drop',e=>takePhoto(e.dataTransfer.files[0]));
-
-  $('locBtn').addEventListener('click',()=>{
-    if(!navigator.geolocation){ toast('Location is not supported on this device'); return; }
-    const b = $('locBtn'); b.classList.add('loading');
-    navigator.geolocation.getCurrentPosition(async pos=>{
-      const {latitude:la, longitude:lo} = pos.coords;
-      let text = 'GPS: '+la.toFixed(5)+', '+lo.toFixed(5);
-      try{
-        if(!API.BASE) throw 0; /* server-side proxy: GET /geocode?lat&lon -> {display_name} */ const r = await fetch(API.BASE+`/geocode?lat=${la}&lon=${lo}`,{credentials:'same-origin'});
-        const j = await r.json();
-        if(j.display_name) text = j.display_name;
-      }catch(e){}
-      $('cAddress').value = text; updateProgress();
-      b.classList.remove('loading'); toast('Location added');
-    },()=>{ b.classList.remove('loading'); toast('Could not get location — type it manually'); },{enableHighAccuracy:true,timeout:10000});
-  });
 
   const shake = el => { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),450); };
 
