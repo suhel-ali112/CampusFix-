@@ -4,3 +4,7 @@ venv/
 __pycache__/
 *.pyc
 certs/ca.pem
+.env.*
+!.env.example
+*.zip
+.DS_Store

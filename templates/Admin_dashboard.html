@@ -1458,7 +1458,7 @@
     if(res.includes(false)) toast(serverDown?'Server connection failed':'Could not load some data');
     renderHod(); renderOverview(); window.__nReady=true; renderNotifBadge();
   })();
-  setInterval(syncNow,30000);                                   // pick up new student complaints
+  setTimeout(()=>setInterval(syncNow,45000), Math.floor(Math.random()*15000));                                   // pick up new student complaints
   document.addEventListener('visibilitychange',syncNow);        // refresh when the tab is opened again
 </script>
 </body>

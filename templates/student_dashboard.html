@@ -1523,7 +1523,8 @@
   addEventListener('online',()=>{ setOnline(); syncPending().then(pullStatuses); });
   addEventListener('offline',setOnline);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) syncPending().then(pullStatuses); });
-  setInterval(()=>{ if(document.hidden) return; syncPending().then(pullStatuses); if(current==='notifications') renderNotifs(); },30000);
+  const pollTick = ()=>{ if(document.hidden) return; syncPending().then(pullStatuses); if(current==='notifications') renderNotifs(); };
+  setTimeout(()=>setInterval(pollTick,60000), Math.floor(Math.random()*30000));   // every 60 s from a random start, so thousands of phones never ask in the same second
   addEventListener('popstate',e=>{
     if(skipPop>0){ skipPop--; return; }
     const top = [...document.querySelectorAll('.overlay.show')].pop();

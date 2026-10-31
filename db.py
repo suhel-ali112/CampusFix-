@@ -1,10 +1,12 @@
 import os
 import sys
 import threading
+import time
 import tempfile
 
 import mysql.connector
 from mysql.connector import Error, pooling
+from mysql.connector.errors import PoolError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -57,6 +59,11 @@ def _ssl_options():
 
     return {}
 
+# The connector's pool never waits: when every connection is busy it fails at once with PoolError.
+# So we wait here (a few seconds at most) for one to come back instead of failing the request.
+POOL_WAIT = float(os.getenv("DB_POOL_WAIT", "5"))
+
+
 def get_db_connection():
     """Pooled connection (conn.close() returns it to the pool). None on failure."""
     global _pool
@@ -69,7 +76,7 @@ def get_db_connection():
             if _pool is None:
                 _pool = pooling.MySQLConnectionPool(
                     pool_name="campusfix",
-                    pool_size=int(os.getenv("DB_POOL_SIZE", "8")),
+                    pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
                     pool_reset_session=True,
                     host=os.getenv("DB_HOST"),
                     port=int(os.getenv("DB_PORT", "3306")),
@@ -81,12 +88,20 @@ def get_db_connection():
                     connection_timeout=10,
                     **_ssl_options(),
                 )
-        return _pool.get_connection()
+        deadline = time.monotonic() + POOL_WAIT
+        while True:
+            try:
+                return _pool.get_connection()
+            except PoolError:                      # all connections busy right now
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.05)
     except (Error, ValueError) as err:
         print(f"Database Connection Error: {err}")
         return None
 
 
+TABLE_OPTS = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 TABLE_OPTS = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 
 TABLES = [

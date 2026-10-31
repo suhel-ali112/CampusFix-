@@ -2,12 +2,14 @@ import base64
 import hmac
 import json
 import os
+import random
 import re
 import secrets
 import urllib.error
 import threading
 import time
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import timedelta
 from email.message import EmailMessage
@@ -19,6 +21,8 @@ from flask import Flask, Response, g, jsonify, redirect, render_template, reques
 from jinja2 import TemplateNotFound
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
+
+from mysql.connector import errors as mysql_errors
 
 from db import get_db_connection, init_db
 
@@ -39,9 +43,13 @@ def env_flag(name, default=False):
 
 app = Flask(__name__)
 
-if env_flag('TRUST_PROXY'):
+ON_RENDER = bool(os.environ.get('RENDER'))      # Render sets RENDER=true on its servers
+
+# Behind Render's proxy the real client IP and https come from its headers. Without this every
+# visitor looks like the same IP, and the per-IP rate limits would block everyone together.
+if env_flag('TRUST_PROXY', ON_RENDER):
     from werkzeug.middleware.proxy_fix import ProxyFix
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=int(os.environ.get('PROXY_HOPS', '1')), x_proto=1, x_host=1)
 
 _secret = os.environ.get('SECRET_KEY')
 if not _secret:
@@ -51,17 +59,19 @@ app.secret_key = _secret
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=env_flag('COOKIE_SECURE'),       # set COOKIE_SECURE=1 when served over HTTPS
+    SESSION_COOKIE_SECURE=env_flag('COOKIE_SECURE', ON_RENDER),   # on by default on Render (it serves HTTPS)
     PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
-    MAX_CONTENT_LENGTH=12 * 1024 * 1024,
+    MAX_CONTENT_LENGTH=3 * 1024 * 1024,                    # photos are compressed in the browser to ~100-300 KB
 )
 
-SMTP_EMAIL = os.environ.get('SMTP_EMAIL', '')
-SMTP_APP_PASSWORD = os.environ.get('SMTP_APP_PASSWORD', '')
 REQUIRE_EMAIL_OTP = env_flag('REQUIRE_EMAIL_OTP', True)     # signup needs a verified email
 
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '').strip()
 BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', '').strip()
+# Soft daily budget (free Brevo plans have a daily cap). Status mails ("under review", "resolved" ...)
+# get a smaller share, so they can never use up the mails that signup OTPs and password resets need.
+EMAIL_DAILY_LIMIT = int(os.environ.get('EMAIL_DAILY_LIMIT', '280'))
+STATUS_EMAIL_LIMIT = int(os.environ.get('STATUS_EMAIL_LIMIT', '150'))
 
 ADMIN_DB_ROLES = {'hod', 'admin'}
 CATEGORIES = {'Hostel', 'Mess', 'Classroom', 'Electricity', 'Water', 'Wi-Fi', 'Cleanliness', 'Other'}
@@ -74,7 +84,7 @@ STATUS_TO_UI = {'pending': 'submitted', 'in progress': 'review', 'resolved': 're
 STATUS_TO_DB = {'submitted': 'Pending', 'review': 'In Progress', 'resolved': 'Resolved'}
 
 MIN_REPORT = 20
-MAX_COMPLAINT_PHOTO = 3 * 1024 * 1024
+MAX_COMPLAINT_PHOTO = 1 * 1024 * 1024
 MAX_PROFILE_PHOTO = 1024 * 1024
 
 
@@ -208,13 +218,25 @@ def check_data_url(s, max_bytes):
 # ---------- passwords ----------
 HASH_PREFIXES = ('scrypt:', 'pbkdf2:')
 
+# scrypt needs ~100 ms CPU and ~32 MB RAM per hash. Allow only a few at once, so a burst of logins
+# queues up instead of using all the memory of a small instance.
+_hash_gate = threading.BoundedSemaphore(int(os.environ.get('MAX_PARALLEL_HASH', '3')))
+_werkzeug_hash = generate_password_hash
+PW_HASH_METHOD = os.environ.get('PW_HASH_METHOD', 'scrypt')
+
+
+def hash_password(pw):
+    with _hash_gate:
+        return _werkzeug_hash(pw, method=PW_HASH_METHOD)
+
 
 def verify_password(stored, given):
     """-> (is_valid, needs_upgrade). Supports old plain-text rows and upgrades them."""
     if not stored or given is None:
         return False, False
     if str(stored).startswith(HASH_PREFIXES):
-        return check_password_hash(stored, given), False
+        with _hash_gate:
+            return check_password_hash(stored, given), False
     good = hmac.compare_digest(str(stored).encode(), str(given).encode())
     return good, good
 
@@ -227,6 +249,9 @@ def gen_password(n=10):
 
 
 # ---------- tiny in-memory rate limiting (single process) ----------
+# Requests run in several threads at once, so the shared dicts below are only touched while
+# holding _mem_lock (iterating a dict while another thread changes it raises RuntimeError).
+_mem_lock = threading.RLock()
 _hits = defaultdict(deque)
 _fails = defaultdict(deque)
 
@@ -236,40 +261,47 @@ _last_sweep = 0.0
 
 def sweep_memory(now):
     global _last_sweep
-    if now - _last_sweep < 60:
-        return
-    _last_sweep = now
-    for store, ttl in ((_hits, 3600), (_fails, 300)):
-        for k in [k for k, q in store.items() if not q or now - q[-1] > ttl]:
-            store.pop(k, None)
-    for k in [k for k, v in _otps.items() if v['exp'] < now]:
-        _otps.pop(k, None)
-    for k in [k for k, t in _verified.items() if t < now]:
-        _verified.pop(k, None)
+    with _mem_lock:
+        if now - _last_sweep < 60:
+            return
+        _last_sweep = now
+        for store, ttl in ((_hits, 3600), (_fails, 300)):
+            for k in [k for k, q in list(store.items()) if not q or now - q[-1] > ttl]:
+                store.pop(k, None)
+        for store in (_otps, _reset_otps, _reset_tokens):
+            for k in [k for k, v in list(store.items()) if v['exp'] < now]:
+                store.pop(k, None)
+        for k in [k for k, t in list(_verified.items()) if t < now]:
+            _verified.pop(k, None)
 
 
 def too_many(key, limit, window):
     now = time.time()
-    sweep_memory(now)
-    q = _hits[key]
-    while q and now - q[0] > window:
-        q.popleft()
-    if len(q) >= limit:
-        return True
-    q.append(now)
-    return False
+    with _mem_lock:
+        sweep_memory(now)
+        q = _hits[key]
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= limit:
+            app.logger.warning('Rate limit hit: %s', key)
+            return True
+        q.append(now)
+        return False
 
 
 def login_locked(key, limit=5, window=300):
     now = time.time()
-    q = _fails[key]
-    while q and now - q[0] > window:
-        q.popleft()
-    return len(q) >= limit
+    with _mem_lock:
+        sweep_memory(now)
+        q = _fails[key]
+        while q and now - q[0] > window:
+            q.popleft()
+        return len(q) >= limit
 
 
 def login_failed(key):
-    _fails[key].append(time.time())
+    with _mem_lock:
+        _fails[key].append(time.time())
 
 
 # ---------- auth ----------
@@ -299,7 +331,8 @@ def staff_required(api=True):
             row = None
             if session.get('role') == 'staff' and sid:
                 with db(True) as (conn, cur):
-                    cur.execute('SELECT * FROM staff WHERE id = %s AND active = 1', (sid,))
+                    cur.execute('SELECT id, name, email, dept, role, phone, password, active, must_change_password, '
+                                'created_at FROM staff WHERE id = %s AND active = 1', (sid,))
                     row = cur.fetchone()
             if not row:
                 if session.get('role') == 'staff':   # only drop a staff session, never a student/admin one
@@ -331,7 +364,7 @@ def render_any(names, **ctx):
 # ======================================================================
 # Email
 # ======================================================================
-def send_email(to, subject, body, attachment=None):
+def send_email(to, subject, body, attachment=None, timeout=10):
     if not BREVO_API_KEY or not BREVO_SENDER_EMAIL:
         raise RuntimeError(
             'BREVO_API_KEY / BREVO_SENDER_EMAIL are not configured'
@@ -368,7 +401,7 @@ def send_email(to, subject, body, attachment=None):
     )
 
     try:
-        with urlrequest.urlopen(req, timeout=15) as response:
+        with urlrequest.urlopen(req, timeout=timeout) as response:
             if response.status not in (200, 201, 202):
                 raise RuntimeError(
                     f"Brevo email failed: HTTP {response.status}"
@@ -380,13 +413,54 @@ def send_email(to, subject, body, attachment=None):
         ) from e
 
 
-def send_email_async(*args, **kwargs):
-    def run():
+def email_enabled():
+    return bool(BREVO_API_KEY and BREVO_SENDER_EMAIL)
+
+
+_email_day = {'d': None, 'n': 0, 'status': 0}
+_email_lock = threading.Lock()
+
+
+def email_budget(status=False):
+    """True if one more mail may be sent today (counted in memory; resets at midnight UTC or on restart)."""
+    today = time.strftime('%Y-%m-%d', time.gmtime())
+    with _email_lock:
+        if _email_day['d'] != today:
+            _email_day.update(d=today, n=0, status=0)
+        if _email_day['n'] >= EMAIL_DAILY_LIMIT or (status and _email_day['status'] >= STATUS_EMAIL_LIMIT):
+            return False
+        _email_day['n'] += 1
+        if status:
+            _email_day['status'] += 1
+        return True
+
+
+# A small fixed pool sends the mails in the background: no thread per mail, and one retry.
+_mail_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='mail')
+
+
+def _send_with_retry(args, kwargs):
+    for attempt in (1, 2):
         try:
             send_email(*args, **kwargs)
+            return
         except Exception as e:
-            app.logger.warning('Email not sent: %s', e)
-    threading.Thread(target=run, daemon=True).start()
+            app.logger.warning('Email attempt %s failed: %s', attempt, e)
+            if attempt == 1:
+                time.sleep(3)
+
+
+def send_email_async(*args, status=False, **kwargs):
+    if not email_enabled():
+        return
+    if not email_budget(status):
+        app.logger.warning('Daily email budget used up - mail not sent')
+        return
+    _mail_pool.submit(_send_with_retry, args, kwargs)
+
+
+def send_status_email(*args, **kwargs):
+    return send_email_async(*args, status=True, **kwargs)
 
 
 # ======================================================================
@@ -491,18 +565,45 @@ def bootstrap_admin():
         if cur.fetchone():
             return
         cur.execute("INSERT INTO users (name, email, password_hash, role) VALUES (%s, %s, %s, 'admin')",
-                    (clean(os.environ.get('ADMIN_NAME'), 100) or 'Admin', email, generate_password_hash(password)))
+                    (clean(os.environ.get('ADMIN_NAME'), 100) or 'Admin', email, hash_password(password)))
         conn.commit()
         print(f'admin created from ADMIN_EMAIL: {email}')
 
 
-if not env_flag('SKIP_SCHEMA_CHECK'):
+def run_startup_checks():
+    """Schema check under a MySQL advisory lock: with more than one worker only one runs it, the rest wait."""
+    lock_conn, locked = get_db_connection(), False
     try:
+        if lock_conn:
+            lc = lock_conn.cursor()
+            lc.execute("SELECT GET_LOCK('campusfix_schema', 60)")
+            locked = (lc.fetchone() or [0])[0] == 1
+            lc.close()
         init_db()
         ensure_schema()
         bootstrap_admin()
+    finally:
+        if lock_conn:
+            try:
+                if locked:
+                    lc = lock_conn.cursor()
+                    lc.execute("SELECT RELEASE_LOCK('campusfix_schema')")
+                    lc.fetchall()
+                    lc.close()
+            except Exception:
+                pass
+            finally:
+                lock_conn.close()
+
+
+if not env_flag('SKIP_SCHEMA_CHECK'):
+    try:
+        run_startup_checks()
     except Exception as e:  # app still starts; the message tells what to fix
         print(f'WARNING: schema check failed: {e}')
+
+print(f"config: render={ON_RENDER} proxy_fix={env_flag('TRUST_PROXY', ON_RENDER)} "
+      f"cookie_secure={app.config['SESSION_COOKIE_SECURE']} email_enabled={email_enabled()}")
 
 
 # ======================================================================
@@ -520,14 +621,14 @@ def notify(cur, complaint_id, title, message):
 
 
 def mail_student(num, subject, body):
-    if not (SMTP_EMAIL and SMTP_APP_PASSWORD):
+    if not (email_enabled()):
         return
     with db(True) as (conn, cur):
         cur.execute('SELECT u.name, u.email, c.title FROM complaints c '
                     'JOIN users u ON c.student_id = u.id WHERE c.id = %s', (num,))
         r = cur.fetchone()
     if r and r['email']:
-        send_email_async(r['email'], subject,
+        send_status_email(r['email'], subject,
                          f"Hello {r['name'] or 'Student'},\n\n{body.replace('{title}', r['title'] or '')}\n\n- CampusFix")
 
 
@@ -621,6 +722,9 @@ def add_headers(resp):
     resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
     resp.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
     resp.headers.setdefault('Referrer-Policy', 'same-origin')
+    resp.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)')
+    if request.is_secure:
+        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
     if (request.path.startswith('/api/') and not request.path.startswith('/api/photos/')) \
             or request.path.endswith('-dashboard'):
         resp.headers['Cache-Control'] = 'no-store'
@@ -657,6 +761,24 @@ def handle_any_error(e):
 # ======================================================================
 # Pages + auth
 # ======================================================================
+@app.route('/healthz')
+def healthz():
+    """Is the process alive? (no database - so a database hiccup never makes Render restart the app)"""
+    return 'ok', 200
+
+
+@app.route('/readyz')
+def readyz():
+    """Can the app reach the database?"""
+    try:
+        with db() as (conn, cur):
+            cur.execute('SELECT 1')
+            cur.fetchone()
+        return 'ready', 200
+    except Exception:
+        return 'database unavailable', 503
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -700,20 +822,25 @@ def send_otp():
     email = norm_email(data.get('email'))
     if not EMAIL_RE.match(email):
         return fail('A valid email is required')
-    if too_many(f'otp-ip:{request.remote_addr}', 10, 3600):
+    # IP limit is generous on purpose: a whole campus can sit behind one Wi-Fi IP.
+    if too_many(f'otp-ip:{request.remote_addr}', 120, 3600):
         return fail('Too many requests. Please try again later.', 429)
+    if too_many(f'otp-email:{email}', 5, 3600):
+        return fail('Too many OTP requests for this email. Please try again in an hour.', 429)
     prev = _otps.get(email)
     if prev and time.time() - prev['sent'] < 30:
         return fail('Please wait 30 seconds before asking for another OTP.', 429)
     with db() as (conn, cur):
-        cur.execute('SELECT 1 FROM users WHERE LOWER(email) = %s LIMIT 1', (email,))
+        cur.execute('SELECT 1 FROM users WHERE email = %s LIMIT 1', (email,))
         if cur.fetchone():
             return fail('An account with this email already exists. Please log in.', 409)
 
+    if not email_budget():
+        return fail('The email service is busy right now. Please try again a little later.', 503)
     otp = str(secrets.randbelow(900000) + 100000)
     try:
         send_email(email, 'CampusFix - Email Verification OTP',
-                   f'Your 6-digit verification OTP is: {otp}\n\nIt is valid for 5 minutes.')
+                   f'Your 6-digit verification OTP is: {otp}\n\nIt is valid for 5 minutes.', timeout=8)
     except Exception as e:
         app.logger.error('OTP email failed: %s', e)
         return fail('Could not send the OTP right now. Please try again later.', 502)
@@ -726,18 +853,19 @@ def verify_otp():
     data = request.get_json(silent=True) or {}
     email = norm_email(data.get('email'))
     entered = clean(data.get('otp'), 10)
-    rec = _otps.get(email)
-    if not rec or time.time() > rec['exp']:
+    with _mem_lock:     # one attempt at a time, so parallel requests cannot dodge the try limit
+        rec = _otps.get(email)
+        if not rec or time.time() > rec['exp']:
+            _otps.pop(email, None)
+            return jsonify({'success': False, 'message': 'OTP expired. Request a new one.'})
+        rec['tries'] += 1
+        if rec['tries'] > OTP_MAX_TRIES:
+            _otps.pop(email, None)
+            return jsonify({'success': False, 'message': 'Too many wrong attempts. Request a new OTP.'})
+        if not hmac.compare_digest(rec['otp'], entered):
+            return jsonify({'success': False, 'message': 'Wrong OTP.'})
         _otps.pop(email, None)
-        return jsonify({'success': False, 'message': 'OTP expired. Request a new one.'})
-    rec['tries'] += 1
-    if rec['tries'] > OTP_MAX_TRIES:
-        _otps.pop(email, None)
-        return jsonify({'success': False, 'message': 'Too many wrong attempts. Request a new OTP.'})
-    if not hmac.compare_digest(rec['otp'], entered):
-        return jsonify({'success': False, 'message': 'Wrong OTP.'})
-    _otps.pop(email, None)
-    _verified[email] = time.time() + VERIFIED_TTL
+        _verified[email] = time.time() + VERIFIED_TTL
     return jsonify({'success': True})
 
 
@@ -761,14 +889,14 @@ def _account_for_reset(ident):
         return None
     low = ident.lower()
     with db(True) as (conn, cur):
-        cur.execute('SELECT id, name, email FROM users WHERE roll_number = %s OR LOWER(email) = %s LIMIT 1',
+        cur.execute('SELECT id, name, email FROM users WHERE roll_number = %s OR email = %s LIMIT 1',
                     (ident, low))
         row = cur.fetchone()
         if row:
             row['table'] = 'users'
             return row
         if EMAIL_RE.match(low):
-            cur.execute('SELECT id, name, email FROM staff WHERE LOWER(email) = %s AND active = 1 LIMIT 1', (low,))
+            cur.execute('SELECT id, name, email FROM staff WHERE email = %s AND active = 1 LIMIT 1', (low,))
             row = cur.fetchone()
             if row:
                 row['table'] = 'staff'
@@ -786,7 +914,7 @@ def forgot_send_otp():
     ident = clean(data.get('id'), 120)
     if not ident:
         return fail('Enter your Gmail or roll number')
-    if too_many(f'fp-send-ip:{request.remote_addr}', 10, 3600):
+    if too_many(f'fp-send-ip:{request.remote_addr}', 60, 3600):
         return fail('Too many requests. Please try again later.', 429)
 
     # Same answer whether or not the account exists, so this cannot be used to look up who has an account.
@@ -797,6 +925,8 @@ def forgot_send_otp():
 
     _prune(_reset_otps)
     k = _acct_key(acct)
+    if too_many(f'fp-acct:{k}', 5, 3600):      # nobody can flood one person's inbox
+        return generic
     prev = _reset_otps.get(k)
     if prev and time.time() - prev['sent'] < 30:
         return generic          # resend cooldown
@@ -815,24 +945,25 @@ def forgot_send_otp():
 def forgot_verify_otp():
     data = request.get_json(silent=True) or {}
     entered = clean(data.get('otp'), 10)
-    if too_many(f'fp-verify-ip:{request.remote_addr}', 30, 3600):
+    if too_many(f'fp-verify-ip:{request.remote_addr}', 200, 3600):
         return fail('Too many attempts. Please try again later.', 429)
     acct = _account_for_reset(data.get('id'))
     k = _acct_key(acct) if acct else None
-    rec = _reset_otps.get(k) if acct else None
-    if not rec or time.time() > rec['exp']:
-        if acct:
+    with _mem_lock:     # one attempt at a time, so parallel requests cannot dodge the try limit
+        rec = _reset_otps.get(k) if acct else None
+        if not rec or time.time() > rec['exp']:
+            if acct:
+                _reset_otps.pop(k, None)
+            return fail('OTP expired or not requested. Please request a new one.')
+        rec['tries'] += 1
+        if rec['tries'] > OTP_MAX_TRIES:
             _reset_otps.pop(k, None)
-        return fail('OTP expired or not requested. Please request a new one.')
-    rec['tries'] += 1
-    if rec['tries'] > OTP_MAX_TRIES:
+            return fail('Too many wrong attempts. Please request a new OTP.')
+        if not hmac.compare_digest(rec['otp'], entered):
+            return fail('Incorrect OTP - try again')
         _reset_otps.pop(k, None)
-        return fail('Too many wrong attempts. Please request a new OTP.')
-    if not hmac.compare_digest(rec['otp'], entered):
-        return fail('Incorrect OTP - try again')
-    _reset_otps.pop(k, None)
-    token = secrets.token_urlsafe(32)
-    _reset_tokens[k] = {'token': token, 'exp': time.time() + RESET_TOKEN_TTL}
+        token = secrets.token_urlsafe(32)
+        _reset_tokens[k] = {'token': token, 'exp': time.time() + RESET_TOKEN_TTL}
     return ok(token=token)
 
 
@@ -851,10 +982,10 @@ def forgot_reset():
     with db(True) as (conn, cur):
         if acct['table'] == 'staff':     # choosing their own password also ends the "temporary password" state
             cur.execute('UPDATE staff SET password = %s, must_change_password = 0 WHERE id = %s',
-                        (generate_password_hash(password), acct['id']))
+                        (hash_password(password), acct['id']))
         else:
             cur.execute('UPDATE users SET password_hash = %s WHERE id = %s',
-                        (generate_password_hash(password), acct['id']))
+                        (hash_password(password), acct['id']))
         conn.commit()
     _reset_tokens.pop(k, None)
     _reset_otps.pop(k, None)
@@ -890,16 +1021,28 @@ def signup():
     if REQUIRE_EMAIL_OTP and _verified.get(email, 0) < time.time():
         return err('Please verify your email with the OTP first.', 403)
 
+    pw_hash = hash_password(password)       # slow (~100 ms): done before a database connection is taken
     with db(True) as (conn, cur):
-        cur.execute('SELECT id FROM users WHERE roll_number = %s OR LOWER(email) = %s LIMIT 1', (roll, email))
+        cur.execute('SELECT id FROM users WHERE roll_number = %s OR email = %s LIMIT 1', (roll, email))
         if cur.fetchone():
             return err('An account with this roll number or email already exists.', 409)
-        cur.execute("""INSERT INTO users (name, email, password_hash, role, roll_number, course_year)
-                       VALUES (%s, %s, %s, 'student', %s, %s)""",
-                    (name, email, generate_password_hash(password), roll, course_year))
-        conn.commit()
+        try:
+            cur.execute("""INSERT INTO users (name, email, password_hash, role, roll_number, course_year)
+                           VALUES (%s, %s, %s, 'student', %s, %s)""",
+                        (name, email, pw_hash, roll, course_year))
+            conn.commit()
+        except mysql_errors.IntegrityError:     # two signups at the same moment: the unique keys stop the second
+            conn.rollback()
+            return err('An account with this roll number or email already exists.', 409)
     _verified.pop(email, None)
     return ok('Account created', redirect=url_for('index')) if as_json else redirect(url_for('index'))
+
+
+def _upgrade_hash(table, column, row_id, password):
+    """Old plain-text password -> store a hash. (table / column come from this file only, never from users.)"""
+    with db() as (conn, cur):
+        cur.execute(f'UPDATE {table} SET {column} = %s WHERE id = %s', (hash_password(password), row_id))
+        conn.commit()
 
 
 def authenticate(login_id, password):
@@ -907,30 +1050,29 @@ def authenticate(login_id, password):
     staff by email in `staff`.  -> (kind, row, error)  kind: 'student' | 'admin' | 'staff'"""
     lid = login_id.lower()
     with db(True) as (conn, cur):
-        cur.execute('SELECT * FROM users WHERE roll_number = %s OR LOWER(email) = %s LIMIT 1', (login_id, lid))
+        cur.execute('SELECT id, name, email, password_hash, role FROM users '
+                    'WHERE roll_number = %s OR email = %s LIMIT 1', (login_id, lid))
         user = cur.fetchone()
-        if user:
-            valid, upgrade = verify_password(user['password_hash'], password)
-            if valid:
-                if upgrade:  # old plain-text password -> store a hash
-                    cur.execute('UPDATE users SET password_hash = %s WHERE id = %s',
-                                (generate_password_hash(password), user['id']))
-                    conn.commit()
-                role = normalize_role(user['role'])
-                if not role:
-                    return None, None, ('Your account has no valid role. Please contact the administrator.', 403)
-                return role, user, None
+        staff = None
         if EMAIL_RE.match(lid):
-            cur.execute('SELECT * FROM staff WHERE LOWER(email) = %s AND active = 1 LIMIT 1', (lid,))
+            cur.execute('SELECT id, name, dept, password FROM staff WHERE email = %s AND active = 1 LIMIT 1', (lid,))
             staff = cur.fetchone()
-            if staff:
-                valid, upgrade = verify_password(staff['password'], password)
-                if valid:
-                    if upgrade:
-                        cur.execute('UPDATE staff SET password = %s WHERE id = %s',
-                                    (generate_password_hash(password), staff['id']))
-                        conn.commit()
-                    return 'staff', staff, None
+    # The slow password check runs after the connection went back to the pool.
+    if user:
+        valid, upgrade = verify_password(user['password_hash'], password)
+        if valid:
+            if upgrade:
+                _upgrade_hash('users', 'password_hash', user['id'], password)
+            role = normalize_role(user['role'])
+            if not role:
+                return None, None, ('Your account has no valid role. Please contact the administrator.', 403)
+            return role, user, None
+    if staff:
+        valid, upgrade = verify_password(staff['password'], password)
+        if valid:
+            if upgrade:
+                _upgrade_hash('staff', 'password', staff['id'], password)
+            return 'staff', staff, None
     return None, None, ('Invalid login ID or password.', 401)
 
 
@@ -954,6 +1096,7 @@ def login():
     if error:
         if error[1] == 401:
             login_failed(key)
+            app.logger.warning('Failed login from IP %s', request.remote_addr)   # lets you check the proxy setup in the logs
         return err(*error)
 
     session.clear()
@@ -999,7 +1142,7 @@ def api_add_complaint():
     if data.get('photo'):
         chk = check_data_url(data['photo'], MAX_COMPLAINT_PHOTO)
         if not chk:
-            return fail('Photo must be a JPG, PNG or WebP image under 3 MB')
+            return fail('Photo must be a JPG, PNG or WebP image under 1 MB')
         photo = chk[0]
 
     student_id = session['user_id']
@@ -1010,6 +1153,8 @@ def api_add_complaint():
             dup = cur.fetchone()
             if dup:
                 return ok('Complaint registered successfully!', id=cf_id(dup['id']))
+        if too_many(f'newc:{student_id}', 20, 3600):      # after the duplicate check, so a retry is never blocked
+            return fail('You are sending too many complaints. Please try again in a while.', 429)
         try:
             cur.execute("""INSERT INTO complaints
                              (student_id, title, description, location, category, priority, status, photo, client_cid)
@@ -1046,7 +1191,7 @@ def _own_complaint(cur, cid):
     num = parse_cid(cid)
     if num is None:
         return None, None, fail('Invalid complaint ID', 400)
-    cur.execute('SELECT id, status FROM complaints WHERE id = %s AND student_id = %s',
+    cur.execute('SELECT id, status FROM complaints WHERE id = %s AND student_id = %s FOR UPDATE',
                 (num, session['user_id']))
     return num, cur.fetchone(), None
 
@@ -1206,7 +1351,7 @@ def api_change_password():
             login_failed(key)
             return fail('Current password is incorrect')
         cur.execute('UPDATE users SET password_hash = %s WHERE id = %s',
-                    (generate_password_hash(new), session['user_id']))
+                    (hash_password(new), session['user_id']))
         conn.commit()
     return ok('Password changed')
 
@@ -1218,6 +1363,10 @@ def api_notifications():
         cur.execute('SELECT id, complaint_id, title, message, is_read, created_at FROM user_notifications '
                     'WHERE user_id = %s ORDER BY id DESC LIMIT 50', (session['user_id'],))
         rows = cur.fetchall()
+        if random.random() < 0.02:      # now and then: old notifications are dropped, the table cannot grow forever
+            cur.execute('DELETE FROM user_notifications WHERE user_id = %s AND created_at < NOW() - INTERVAL 60 DAY',
+                        (session['user_id'],))
+            conn.commit()
     return jsonify([{'id': r['id'], 'cid': cf_id(r['complaint_id']) if r['complaint_id'] else None,
                      'title': r['title'], 'text': r['message'], 'read': bool(r['is_read']),
                      'ts': to_ms(r['created_at']) or 0} for r in rows])
@@ -1347,7 +1496,7 @@ def api_hod_update_complaint(cid):
             return fail('Invalid status')
 
     with db(True) as (conn, cur):
-        cur.execute('SELECT id, status FROM complaints WHERE id = %s', (num,))
+        cur.execute('SELECT id, status FROM complaints WHERE id = %s FOR UPDATE', (num,))
         row = cur.fetchone()
         if not row:
             return fail('Complaint not found', 404)
@@ -1412,7 +1561,7 @@ def api_hod_resolve_complaint(cid):
     if f:
         res = check_image_bytes(f.read(), MAX_COMPLAINT_PHOTO)
         if not res:
-            return fail('Photo must be a JPG, PNG or WebP image under 3 MB')
+            return fail('Photo must be a JPG, PNG or WebP image under 1 MB')
         photo_url, sub = res
         raw_photo = base64.b64decode(photo_url.split(',', 1)[1])
         report = clean(request.form.get('report'), 3000)
@@ -1422,7 +1571,7 @@ def api_hod_resolve_complaint(cid):
         if given:
             chk = check_data_url(given, MAX_COMPLAINT_PHOTO)
             if not chk:
-                return fail('Photo must be a JPG, PNG or WebP image under 3 MB')
+                return fail('Photo must be a JPG, PNG or WebP image under 1 MB')
             photo_url, raw_photo, sub = chk
         report = clean(data.get('report'), 3000)
 
@@ -1431,6 +1580,7 @@ def api_hod_resolve_complaint(cid):
 
     admin_name = session.get('name') or 'Admin'
     with db(True) as (conn, cur):
+        cur.execute('SELECT id FROM complaints WHERE id = %s FOR UPDATE', (num,))   # admin and staff cannot resolve at the same moment
         cur.execute("""SELECT c.id, c.title, u.name AS student_name, u.email AS student_email
                        FROM complaints c LEFT JOIN users u ON c.student_id = u.id WHERE c.id = %s""", (num,))
         row = cur.fetchone()
@@ -1444,8 +1594,8 @@ def api_hod_resolve_complaint(cid):
         notify(cur, num, 'Complaint resolved', f'{cf_id(num)} - "{row["title"]}" was resolved by {admin_name}.')
         conn.commit()
 
-    if row.get('student_email') and SMTP_EMAIL and SMTP_APP_PASSWORD:
-        send_email_async(
+    if row.get('student_email') and email_enabled():
+        send_status_email(
             row['student_email'],
             f"CampusFix - Your complaint {cf_id(num)} is resolved",
             f"Hello {row.get('student_name') or 'Student'},\n\n"
@@ -1513,7 +1663,7 @@ def update_hod_profile():
     uid = session['user_id']
     with db(True) as (conn, cur):
         if email:
-            cur.execute('SELECT id FROM users WHERE LOWER(email) = %s AND id <> %s LIMIT 1', (email, uid))
+            cur.execute('SELECT id FROM users WHERE email = %s AND id <> %s LIMIT 1', (email, uid))
             if cur.fetchone():
                 return fail('This email belongs to another account', 409)
             cur.execute('UPDATE users SET email = %s WHERE id = %s', (email, uid))
@@ -1592,7 +1742,7 @@ def api_hod_staff_create():
         return fail(err)
     password = gen_password()
     with db(True) as (conn, cur):
-        cur.execute('SELECT id FROM staff WHERE LOWER(email) = %s LIMIT 1', (vals['email'],))
+        cur.execute('SELECT id FROM staff WHERE email = %s LIMIT 1', (vals['email'],))
         if cur.fetchone():
             return fail('A staff account with this email already exists', 409)
         try:
@@ -1600,7 +1750,7 @@ def api_hod_staff_create():
                                               must_change_password, created_at)
                            VALUES (%s, %s, %s, %s, %s, %s, 1, 1, CURRENT_TIMESTAMP)""",
                         (vals['name'], vals['email'], vals['dept'], vals['role'], vals['phone'],
-                         generate_password_hash(password)))
+                         hash_password(password)))
             new_id = cur.lastrowid
             conn.commit()
         except Exception as e:   # admin-only screen: show the real reason so it can be fixed
@@ -1628,7 +1778,7 @@ def api_hod_staff_update(sid):
         if not cur.fetchone():
             return fail('Staff member not found', 404)
         if 'email' in vals:
-            cur.execute('SELECT id FROM staff WHERE LOWER(email) = %s AND id <> %s LIMIT 1', (vals['email'], sid))
+            cur.execute('SELECT id FROM staff WHERE email = %s AND id <> %s LIMIT 1', (vals['email'], sid))
             if cur.fetchone():
                 return fail('A staff account with this email already exists', 409)
         cols = [c for c in ('name', 'email', 'dept', 'role', 'phone', 'active') if c in vals]  # fixed whitelist
@@ -1648,7 +1798,7 @@ def api_hod_staff_reset(sid):
         if not st:
             return fail('Staff member not found', 404)
         cur.execute('UPDATE staff SET password = %s, must_change_password = 1 WHERE id = %s',
-                    (generate_password_hash(password), sid))
+                    (hash_password(password), sid))
         conn.commit()
     emailed = email_staff_password(st['name'], st['email'], password, created=False)
     return ok('Password reset and emailed to the staff member.' if emailed else
@@ -1687,9 +1837,11 @@ def api_staff_me():
         counts = {r['id']: r['n'] for r in cur.fetchall()}
         cur.execute('SELECT id FROM staff WHERE active = 1')
         ids = [r['id'] for r in cur.fetchall()]
+        cur.execute('SELECT profile_photo FROM staff WHERE id = %s', (me['id'],))   # photo only when it is needed
+        photo = (cur.fetchone() or {}).get('profile_photo') or ''
     mine = counts.get(me['id'], 0)
     d = serialize_staff(me)
-    d.update(photo=me.get('profile_photo') or '', teamSize=len(ids),
+    d.update(photo=photo, teamSize=len(ids),
              rank=1 + sum(1 for i in ids if counts.get(i, 0) > mine),
              mustChange=bool(me.get('must_change_password')))
     return jsonify(d)
@@ -1735,7 +1887,7 @@ def api_staff_action(cid, action):
     if action == 'resolve' and data.get('photo'):
         chk = check_data_url(data['photo'], MAX_COMPLAINT_PHOTO)
         if not chk:
-            return fail('Photo must be a JPG, PNG or WebP image under 3 MB')
+            return fail('Photo must be a JPG, PNG or WebP image under 1 MB')
         photo_url, raw, sub = chk
 
     with db(True) as (conn, cur):
@@ -1788,8 +1940,8 @@ def api_staff_action(cid, action):
 
     if mail:
         mail_student(num, *mail)
-    if action == 'resolve' and row.get('student_email') and SMTP_EMAIL and SMTP_APP_PASSWORD:
-        send_email_async(
+    if action == 'resolve' and row.get('student_email') and email_enabled():
+        send_status_email(
             row['student_email'],
             f"CampusFix - Your complaint {cf_id(num)} is resolved",
             f"Hello {row.get('student_name') or 'Student'},\n\n"
@@ -1850,7 +2002,7 @@ def api_staff_change_password():
         return fail('New password must be different')
     with db() as (conn, cur):
         cur.execute('UPDATE staff SET password = %s, must_change_password = 0 WHERE id = %s',
-                    (generate_password_hash(new), g.staff['id']))
+                    (hash_password(new), g.staff['id']))
         conn.commit()
     return ok('Password changed')
 
