@@ -2,7 +2,8 @@
 import os
 
 worker_class = "gthread"
-# Keep ONE worker until the OTP / rate-limit state is moved out of memory (see README, "Scaling").
+# OTP / reset-token state is in the database, so more workers are possible - but only help on an instance
+# with 1+ CPU (see README, "Scaling"). On a small instance keep 1 worker and use threads.
 workers = int(os.getenv("GUNICORN_WORKERS", "1"))
 threads = int(os.getenv("GUNICORN_THREADS", "8"))          # keep <= DB_POOL_SIZE (default 10)
 timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))

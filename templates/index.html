@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CampusFix — Student Portal Access</title>
+<link rel="icon" type="image/png" href="/static/campusfix_logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1181,7 +1182,7 @@ async function sendOtpToGmail(gmail){
           body: JSON.stringify({ login_id, password })
         });
         let d = {}; try { d = await res.json(); } catch (_) {}
-        if (res.ok && d.success) { window.location.href = d.redirect || '/'; return; }
+        if (res.ok && d.success) { window.location.replace(d.redirect || '/'); return; }   // replace: the login page must not stay in the Back history
         err.textContent = d.message || 'Login failed. Please try again.';
       } catch (_) {
         err.textContent = 'No connection to the server. Please try again.';
@@ -1190,5 +1191,6 @@ async function sendOtpToGmail(gmail){
     });
   })();
 </script>
+<script>window.addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });  /* Back button restored an old copy of this page: ask the server again */</script>
 </body>
 </html>

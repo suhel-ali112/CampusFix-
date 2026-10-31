@@ -75,3 +75,37 @@ CREATE TABLE IF NOT EXISTS complaint_log (
     CONSTRAINT fk_log_complaint FOREIGN KEY (complaint_id)
         REFERENCES complaints(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    complaint_id INT NULL,
+    title VARCHAR(120) NOT NULL,
+    message VARCHAR(500) NOT NULL,
+    is_read TINYINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_notif_user (user_id, id),
+    CONSTRAINT fk_notif_user FOREIGN KEY (user_id)
+        REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notif_complaint FOREIGN KEY (complaint_id)
+        REFERENCES complaints(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OTPs, "email verified" tickets, reset tokens (keyed hashes only)
+CREATE TABLE IF NOT EXISTS auth_state (
+    k VARCHAR(80) NOT NULL PRIMARY KEY,
+    kind VARCHAR(12) NOT NULL,
+    code VARCHAR(80) NOT NULL DEFAULT '',
+    tries INT NOT NULL DEFAULT 0,
+    sent BIGINT NOT NULL DEFAULT 0,
+    exp BIGINT NOT NULL,
+    KEY idx_auth_exp (exp)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- shared counters: OTP requests per email, emails sent today
+CREATE TABLE IF NOT EXISTS counters (
+    k VARCHAR(80) NOT NULL PRIMARY KEY,
+    n INT NOT NULL DEFAULT 0,
+    exp BIGINT NOT NULL,
+    KEY idx_counters_exp (exp)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

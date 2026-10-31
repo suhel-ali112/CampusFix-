@@ -1,5 +1,7 @@
 import base64
+import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import random
@@ -17,7 +19,8 @@ from functools import wraps
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
-from flask import Flask, Response, g, jsonify, redirect, render_template, request, session, url_for
+from flask import (Flask, Response, g, has_request_context, jsonify, redirect, render_template, request,
+                   session, url_for)
 from jinja2 import TemplateNotFound
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -61,6 +64,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax',
     SESSION_COOKIE_SECURE=env_flag('COOKIE_SECURE', ON_RENDER),   # on by default on Render (it serves HTTPS)
     PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    SEND_FILE_MAX_AGE_DEFAULT=timedelta(days=1),           # logo / images are cached by the browser for a day
     MAX_CONTENT_LENGTH=3 * 1024 * 1024,                    # photos are compressed in the browser to ~100-300 KB
 )
 
@@ -98,9 +102,11 @@ class DBError(Exception):
 @contextmanager
 def db(dictionary=False):
     """Open a connection + cursor and always close them. Roll back on error."""
+    t0 = time.perf_counter()
     conn = get_db_connection()
     if not conn:
         raise DBError('Database connection failed')
+    t1 = time.perf_counter()
     cur = conn.cursor(dictionary=dictionary, buffered=True)
     try:
         yield conn, cur
@@ -115,6 +121,10 @@ def db(dictionary=False):
             cur.close()
         finally:
             conn.close()
+            if has_request_context():       # time spent with the database, shown in Server-Timing / SLOW log
+                g.db_ms = g.get('db_ms', 0.0) + (time.perf_counter() - t0) * 1000
+                g.db_wait = g.get('db_wait', 0.0) + (t1 - t0) * 1000
+                g.db_n = g.get('db_n', 0) + 1
 
 
 def ok(message=None, **extra):
@@ -248,6 +258,31 @@ def gen_password(n=10):
     return ''.join(secrets.choice(_PW_CHARS) for _ in range(n))
 
 
+# ---------- real visitor IP ----------
+# Behind Render the socket address is always one of Render's own 10.x proxies. The visitor's IP is in the
+# header Cloudflare adds (CF-Connecting-IP; Cloudflare overwrites whatever a visitor sends in it).
+# X-Forwarded-For is NOT used: Render only appends to it, so a visitor can fake the first entries.
+CLIENT_IP_HEADERS = [h.strip() for h in
+                     os.environ.get('CLIENT_IP_HEADER', 'CF-Connecting-IP,True-Client-IP' if ON_RENDER else '').split(',')
+                     if h.strip()]
+
+
+def _socket_ip():
+    """The address that really connected to us (before ProxyFix replaced it)."""
+    return ((request.environ.get('werkzeug.proxy_fix.orig') or {}).get('REMOTE_ADDR')
+            or request.environ.get('REMOTE_ADDR') or 'unknown')
+
+
+def client_ip():
+    for name in CLIENT_IP_HEADERS:
+        v = (request.headers.get(name) or '').split(',')[0].strip()
+        try:
+            return str(ipaddress.ip_address(v))       # must be a real IP address, never free text
+        except ValueError:
+            continue
+    return request.environ.get('REMOTE_ADDR') or 'unknown'
+
+
 # ---------- tiny in-memory rate limiting (single process) ----------
 # Requests run in several threads at once, so the shared dicts below are only touched while
 # holding _mem_lock (iterating a dict while another thread changes it raises RuntimeError).
@@ -268,11 +303,7 @@ def sweep_memory(now):
         for store, ttl in ((_hits, 3600), (_fails, 300)):
             for k in [k for k, q in list(store.items()) if not q or now - q[-1] > ttl]:
                 store.pop(k, None)
-        for store in (_otps, _reset_otps, _reset_tokens):
-            for k in [k for k, v in list(store.items()) if v['exp'] < now]:
-                store.pop(k, None)
-        for k in [k for k, t in list(_verified.items()) if t < now]:
-            _verified.pop(k, None)
+
 
 
 def too_many(key, limit, window):
@@ -417,21 +448,14 @@ def email_enabled():
     return bool(BREVO_API_KEY and BREVO_SENDER_EMAIL)
 
 
-_email_day = {'d': None, 'n': 0, 'status': 0}
-_email_lock = threading.Lock()
-
-
 def email_budget(status=False):
-    """True if one more mail may be sent today (counted in memory; resets at midnight UTC or on restart)."""
-    today = time.strftime('%Y-%m-%d', time.gmtime())
-    with _email_lock:
-        if _email_day['d'] != today:
-            _email_day.update(d=today, n=0, status=0)
-        if _email_day['n'] >= EMAIL_DAILY_LIMIT or (status and _email_day['status'] >= STATUS_EMAIL_LIMIT):
-            return False
-        _email_day['n'] += 1
-        if status:
-            _email_day['status'] += 1
+    """May one more mail go out today? Counted in the database (see mail_budget), so every worker shares it.
+    If the database cannot be reached the mail is sent anyway - an OTP must not fail because of a counter."""
+    try:
+        with db(True) as (conn, cur):
+            return mail_budget(conn, cur, status)
+    except Exception as e:
+        app.logger.warning('Email budget check failed (%s) - sending anyway', e)
         return True
 
 
@@ -439,7 +463,10 @@ def email_budget(status=False):
 _mail_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='mail')
 
 
-def _send_with_retry(args, kwargs):
+def _send_with_retry(args, kwargs, status):
+    if not email_budget(status):
+        app.logger.warning('Daily email budget used up - mail not sent')
+        return
     for attempt in (1, 2):
         try:
             send_email(*args, **kwargs)
@@ -453,10 +480,7 @@ def _send_with_retry(args, kwargs):
 def send_email_async(*args, status=False, **kwargs):
     if not email_enabled():
         return
-    if not email_budget(status):
-        app.logger.warning('Daily email budget used up - mail not sent')
-        return
-    _mail_pool.submit(_send_with_retry, args, kwargs)
+    _mail_pool.submit(_send_with_retry, args, kwargs, status)    # budget check + sending happen in the background
 
 
 def send_status_email(*args, **kwargs):
@@ -726,9 +750,26 @@ def add_headers(resp):
     if request.is_secure:
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
     if (request.path.startswith('/api/') and not request.path.startswith('/api/photos/')) \
-            or request.path.endswith('-dashboard'):
+            or request.path.endswith('-dashboard') or request.path == '/':
         resp.headers['Cache-Control'] = 'no-store'
+    t0 = g.get('t0')
+    if t0 is not None:          # open the browser's Network tab -> a request -> Timing: shows app vs database time
+        total = (time.perf_counter() - t0) * 1000
+        db_ms = g.get('db_ms', 0.0)
+        resp.headers['Server-Timing'] = f'app;dur={max(total - db_ms, 0):.0f}, db;dur={db_ms:.0f}'
+        if total > SLOW_MS and request.path != '/healthz':
+            app.logger.warning('SLOW %s %s -> %s in %.0f ms (db %.0f ms in %d checkouts, pool wait %.0f ms)',
+                               request.method, request.path, resp.status_code, total, db_ms,
+                               g.get('db_n', 0), g.get('db_wait', 0.0))
     return resp
+
+
+SLOW_MS = int(os.environ.get('SLOW_MS', '700'))
+
+
+@app.before_request
+def start_timer():
+    g.t0 = time.perf_counter()
 
 
 @app.before_request
@@ -769,18 +810,47 @@ def healthz():
 
 @app.route('/readyz')
 def readyz():
-    """Can the app reach the database?"""
+    """Can the app reach the database? Also shows how long it takes (open it twice - the first call connects)."""
+    t0 = time.perf_counter()
     try:
         with db() as (conn, cur):
+            t1 = time.perf_counter()
             cur.execute('SELECT 1')
             cur.fetchone()
-        return 'ready', 200
-    except Exception:
-        return 'database unavailable', 503
+            t2 = time.perf_counter()
+        return jsonify(status='ready', checkout_ms=round((t1 - t0) * 1000), query_ms=round((t2 - t1) * 1000),
+                       total_ms=round((time.perf_counter() - t0) * 1000)), 200
+    except Exception as e:
+        return jsonify(status='database unavailable', error=type(e).__name__,
+                       total_ms=round((time.perf_counter() - t0) * 1000)), 503
+
+
+@app.route('/ip-check')
+def ip_check():
+    """Shows how THIS request looks to the app (only your own request), to check the real-IP setup."""
+    h = request.headers
+    return jsonify(detected_ip=client_ip(), headers_used=CLIENT_IP_HEADERS, socket=_socket_ip(),
+                   cf_connecting_ip=h.get('CF-Connecting-IP'), true_client_ip=h.get('True-Client-IP'),
+                   x_forwarded_for=h.get('X-Forwarded-For'))
+
+
+def home_for_session():
+    """Dashboard of the logged-in user (None when nobody is logged in)."""
+    role = session.get('role')
+    if role == 'staff' and session.get('staff_id'):
+        return url_for('staff_dashboard')
+    if role == 'admin' and session.get('user_id'):
+        return url_for('admin_dashboard')
+    if role == 'student' and session.get('user_id'):
+        return url_for('student_dashboard')
+    return None
 
 
 @app.route('/')
 def index():
+    target = home_for_session()
+    if target:      # already logged in: the Back button must not show the login page again
+        return redirect(target)
     return render_template('index.html')
 
 
@@ -808,14 +878,102 @@ def logout():
     return redirect(url_for('index'))
 
 
-# ---------- OTP ----------
+# ---------- shared state in the database ----------
+# OTPs, "email verified" flags, reset tokens and the OTP / email counters live in the database, not in
+# memory: they survive restarts and deploys, and every gunicorn worker sees the same data.
 OTP_TTL = 300
 OTP_MAX_TRIES = 5
 VERIFIED_TTL = 900
-_otps = {}        # email -> {otp, exp, tries, sent}   (memory: use Redis/DB if you run several workers)
-_verified = {}    # email -> expiry
+RESET_OTP_TTL = 300
+RESET_TOKEN_TTL = 600
 
 
+def _skey(kind, ident):
+    """Database key. The raw email / id is never stored - only a hash of it."""
+    return f'{kind}:' + hashlib.sha256(f'{kind}|{ident}'.encode()).hexdigest()[:48]
+
+
+def _sig(k, secret):
+    """Keyed hash of an OTP / token: a copy of the database alone is not enough to use it."""
+    return hmac.new(str(app.config['SECRET_KEY']).encode(), f'{k}|{secret}'.encode(), hashlib.sha256).hexdigest()
+
+
+def state_put(conn, cur, k, kind, secret, ttl):
+    now = int(time.time())
+    cur.execute("""INSERT INTO auth_state (k, kind, code, tries, sent, exp) VALUES (%s, %s, %s, 0, %s, %s)
+                   ON DUPLICATE KEY UPDATE kind = VALUES(kind), code = VALUES(code), tries = 0,
+                                           sent = VALUES(sent), exp = VALUES(exp)""",
+                (k, kind, _sig(k, secret), now, now + ttl))
+    if random.random() < 0.02:      # now and then: expired rows are removed, the tables cannot grow forever
+        cur.execute('DELETE FROM auth_state WHERE exp < %s', (now,))
+        cur.execute('DELETE FROM counters WHERE exp < %s', (now,))
+    conn.commit()
+
+
+def state_del(conn, cur, k):
+    cur.execute('DELETE FROM auth_state WHERE k = %s', (k,))
+    conn.commit()
+
+
+def state_alive(cur, k):
+    cur.execute('SELECT exp FROM auth_state WHERE k = %s', (k,))
+    row = cur.fetchone()
+    return bool(row and row['exp'] >= int(time.time()))
+
+
+def state_check(conn, cur, k, entered):
+    """Check an OTP and count the attempt. -> 'ok' | 'expired' | 'locked' | 'wrong'.
+    The row is locked while we look at it, so parallel requests (even on different workers)
+    cannot get more than OTP_MAX_TRIES guesses."""
+    now = int(time.time())
+    cur.execute('SELECT code, tries, exp FROM auth_state WHERE k = %s FOR UPDATE', (k,))
+    row = cur.fetchone()
+    if not row or row['exp'] < now:
+        cur.execute('DELETE FROM auth_state WHERE k = %s', (k,))
+        conn.commit()
+        return 'expired'
+    tries = row['tries'] + 1
+    if tries > OTP_MAX_TRIES:
+        cur.execute('DELETE FROM auth_state WHERE k = %s', (k,))
+        conn.commit()
+        return 'locked'
+    if not hmac.compare_digest(row['code'], _sig(k, entered)):
+        cur.execute('UPDATE auth_state SET tries = %s WHERE k = %s', (tries, k))
+        conn.commit()
+        return 'wrong'
+    cur.execute('DELETE FROM auth_state WHERE k = %s', (k,))
+    conn.commit()
+    return 'ok'
+
+
+def _token_ok(cur, k, token, lock=False):
+    cur.execute('SELECT code, exp FROM auth_state WHERE k = %s' + (' FOR UPDATE' if lock else ''), (k,))
+    row = cur.fetchone()
+    return bool(row and row['exp'] >= int(time.time()) and hmac.compare_digest(row['code'], _sig(k, token)))
+
+
+def counter_hit(conn, cur, name, window):
+    """Fixed-window counter shared by all workers -> number of hits in the current window (this one included)."""
+    now = int(time.time())
+    bucket = now // window
+    ck = hashlib.sha256(name.encode()).hexdigest()[:48] + f':{bucket}'
+    cur.execute('INSERT INTO counters (k, n, exp) VALUES (%s, 1, %s) ON DUPLICATE KEY UPDATE n = n + 1',
+                (ck, (bucket + 1) * window + 60))
+    cur.execute('SELECT n FROM counters WHERE k = %s', (ck,))
+    n = (cur.fetchone() or {}).get('n', 1)
+    conn.commit()
+    return n
+
+
+def mail_budget(conn, cur, status=False):
+    """Daily email budget (Brevo free plans have a daily cap). Status mails get a smaller share, so
+    they can never use up the mails that signup OTPs and password resets need."""
+    if status and counter_hit(conn, cur, 'mail-status', 86400) > STATUS_EMAIL_LIMIT:
+        return False
+    return counter_hit(conn, cur, 'mail-total', 86400) <= EMAIL_DAILY_LIMIT
+
+
+# ---------- OTP ----------
 @app.route('/send-otp', methods=['POST'])
 def send_otp():
     data = request.get_json(silent=True) or {}
@@ -823,28 +981,31 @@ def send_otp():
     if not EMAIL_RE.match(email):
         return fail('A valid email is required')
     # IP limit is generous on purpose: a whole campus can sit behind one Wi-Fi IP.
-    if too_many(f'otp-ip:{request.remote_addr}', 120, 3600):
+    if too_many(f'otp-ip:{client_ip()}', 120, 3600):
         return fail('Too many requests. Please try again later.', 429)
-    if too_many(f'otp-email:{email}', 5, 3600):
-        return fail('Too many OTP requests for this email. Please try again in an hour.', 429)
-    prev = _otps.get(email)
-    if prev and time.time() - prev['sent'] < 30:
-        return fail('Please wait 30 seconds before asking for another OTP.', 429)
-    with db() as (conn, cur):
+    k = _skey('otp', email)
+    otp = str(secrets.randbelow(900000) + 100000)
+    with db(True) as (conn, cur):       # one database visit for all the checks, and the OTP is stored
+        cur.execute('SELECT sent FROM auth_state WHERE k = %s', (k,))
+        prev = cur.fetchone()
+        if prev and int(time.time()) - prev['sent'] < 30:      # checked first: a too-early click is not counted
+            return fail('Please wait 30 seconds before asking for another OTP.', 429)
+        if counter_hit(conn, cur, f'otp-email:{email}', 3600) > 5:
+            return fail('Too many OTP requests for this email. Please try again in an hour.', 429)
         cur.execute('SELECT 1 FROM users WHERE email = %s LIMIT 1', (email,))
         if cur.fetchone():
             return fail('An account with this email already exists. Please log in.', 409)
-
-    if not email_budget():
-        return fail('The email service is busy right now. Please try again a little later.', 503)
-    otp = str(secrets.randbelow(900000) + 100000)
+        if not mail_budget(conn, cur):
+            return fail('The email service is busy right now. Please try again a little later.', 503)
+        state_put(conn, cur, k, 'otp', otp, OTP_TTL)
     try:
         send_email(email, 'CampusFix - Email Verification OTP',
                    f'Your 6-digit verification OTP is: {otp}\n\nIt is valid for 5 minutes.', timeout=8)
     except Exception as e:
         app.logger.error('OTP email failed: %s', e)
+        with db(True) as (conn, cur):   # the mail never left: drop the OTP so the cooldown does not block a retry
+            state_del(conn, cur, k)
         return fail('Could not send the OTP right now. Please try again later.', 502)
-    _otps[email] = {'otp': otp, 'exp': time.time() + OTP_TTL, 'tries': 0, 'sent': time.time()}
     return ok('OTP sent successfully!')
 
 
@@ -853,35 +1014,18 @@ def verify_otp():
     data = request.get_json(silent=True) or {}
     email = norm_email(data.get('email'))
     entered = clean(data.get('otp'), 10)
-    with _mem_lock:     # one attempt at a time, so parallel requests cannot dodge the try limit
-        rec = _otps.get(email)
-        if not rec or time.time() > rec['exp']:
-            _otps.pop(email, None)
-            return jsonify({'success': False, 'message': 'OTP expired. Request a new one.'})
-        rec['tries'] += 1
-        if rec['tries'] > OTP_MAX_TRIES:
-            _otps.pop(email, None)
-            return jsonify({'success': False, 'message': 'Too many wrong attempts. Request a new OTP.'})
-        if not hmac.compare_digest(rec['otp'], entered):
-            return jsonify({'success': False, 'message': 'Wrong OTP.'})
-        _otps.pop(email, None)
-        _verified[email] = time.time() + VERIFIED_TTL
-    return jsonify({'success': True})
+    with db(True) as (conn, cur):
+        res = state_check(conn, cur, _skey('otp', email), entered)
+        if res == 'ok':
+            state_put(conn, cur, _skey('ver', email), 'ver', '1', VERIFIED_TTL)
+    if res == 'ok':
+        return jsonify({'success': True})
+    messages = {'expired': 'OTP expired. Request a new one.',
+                'locked': 'Too many wrong attempts. Request a new OTP.', 'wrong': 'Wrong OTP.'}
+    return jsonify({'success': False, 'message': messages[res]})
 
 
 # ---------- forgot password (accounts in the users table) ----------
-RESET_OTP_TTL = 300
-RESET_TOKEN_TTL = 600
-_reset_otps = {}     # user_id -> {otp, exp, tries, sent}   (memory: use Redis/DB if you run several workers)
-_reset_tokens = {}   # user_id -> {token, exp}   (issued after the OTP is verified)
-
-
-def _prune(store):
-    now = time.time()
-    for k in [k for k, v in store.items() if v['exp'] < now]:
-        store.pop(k, None)
-
-
 def _account_for_reset(ident):
     """Find the account by roll number / email (users) or email (staff). -> dict with 'table', or None."""
     ident = clean(ident, 120)
@@ -914,7 +1058,7 @@ def forgot_send_otp():
     ident = clean(data.get('id'), 120)
     if not ident:
         return fail('Enter your Gmail or roll number')
-    if too_many(f'fp-send-ip:{request.remote_addr}', 60, 3600):
+    if too_many(f'fp-send-ip:{client_ip()}', 60, 3600):
         return fail('Too many requests. Please try again later.', 429)
 
     # Same answer whether or not the account exists, so this cannot be used to look up who has an account.
@@ -923,17 +1067,18 @@ def forgot_send_otp():
     if not acct or not acct.get('email'):
         return generic
 
-    _prune(_reset_otps)
-    k = _acct_key(acct)
-    if too_many(f'fp-acct:{k}', 5, 3600):      # nobody can flood one person's inbox
-        return generic
-    prev = _reset_otps.get(k)
-    if prev and time.time() - prev['sent'] < 30:
-        return generic          # resend cooldown
-
+    ak = _acct_key(acct)
+    k = _skey('rotp', ak)
     otp = str(secrets.randbelow(900000) + 100000)
-    _reset_otps[k] = {'otp': otp, 'exp': time.time() + RESET_OTP_TTL, 'tries': 0, 'sent': time.time()}
-    _reset_tokens.pop(k, None)
+    with db(True) as (conn, cur):
+        cur.execute('SELECT sent FROM auth_state WHERE k = %s', (k,))
+        prev = cur.fetchone()
+        if prev and int(time.time()) - prev['sent'] < 30:
+            return generic          # resend cooldown (a too-early click is not counted)
+        if counter_hit(conn, cur, f'fp-acct:{ak}', 3600) > 5:      # nobody can flood one person's inbox
+            return generic
+        state_put(conn, cur, k, 'rotp', otp, RESET_OTP_TTL)
+        state_del(conn, cur, _skey('rtok', ak))        # an older reset session ends when a new OTP is asked for
     send_email_async(acct['email'], 'CampusFix - Password Reset OTP',
                      f"Hello {acct.get('name') or 'there'},\n\n"
                      f"Your password reset OTP is: {otp}\n\nIt is valid for 5 minutes. "
@@ -945,25 +1090,24 @@ def forgot_send_otp():
 def forgot_verify_otp():
     data = request.get_json(silent=True) or {}
     entered = clean(data.get('otp'), 10)
-    if too_many(f'fp-verify-ip:{request.remote_addr}', 200, 3600):
+    if too_many(f'fp-verify-ip:{client_ip()}', 200, 3600):
         return fail('Too many attempts. Please try again later.', 429)
     acct = _account_for_reset(data.get('id'))
-    k = _acct_key(acct) if acct else None
-    with _mem_lock:     # one attempt at a time, so parallel requests cannot dodge the try limit
-        rec = _reset_otps.get(k) if acct else None
-        if not rec or time.time() > rec['exp']:
-            if acct:
-                _reset_otps.pop(k, None)
-            return fail('OTP expired or not requested. Please request a new one.')
-        rec['tries'] += 1
-        if rec['tries'] > OTP_MAX_TRIES:
-            _reset_otps.pop(k, None)
-            return fail('Too many wrong attempts. Please request a new OTP.')
-        if not hmac.compare_digest(rec['otp'], entered):
-            return fail('Incorrect OTP - try again')
-        _reset_otps.pop(k, None)
-        token = secrets.token_urlsafe(32)
-        _reset_tokens[k] = {'token': token, 'exp': time.time() + RESET_TOKEN_TTL}
+    if not acct:
+        return fail('OTP expired or not requested. Please request a new one.')
+    ak = _acct_key(acct)
+    token = None
+    with db(True) as (conn, cur):
+        res = state_check(conn, cur, _skey('rotp', ak), entered)
+        if res == 'ok':
+            token = secrets.token_urlsafe(32)
+            state_put(conn, cur, _skey('rtok', ak), 'rtok', token, RESET_TOKEN_TTL)
+    if res == 'expired':
+        return fail('OTP expired or not requested. Please request a new one.')
+    if res == 'locked':
+        return fail('Too many wrong attempts. Please request a new OTP.')
+    if res == 'wrong':
+        return fail('Incorrect OTP - try again')
     return ok(token=token)
 
 
@@ -974,21 +1118,26 @@ def forgot_reset():
     password = data.get('password') or ''
     if len(password) < 6 or len(password) > 128:
         return fail('Password must be 6 to 128 characters.')
+    expired = 'Your reset session expired. Please start again.'
     acct = _account_for_reset(data.get('id'))
-    k = _acct_key(acct) if acct else None
-    rec = _reset_tokens.get(k) if acct else None
-    if not rec or time.time() > rec['exp'] or not hmac.compare_digest(rec['token'], token):
-        return fail('Your reset session expired. Please start again.')
+    if not acct:
+        return fail(expired)
+    ak = _acct_key(acct)
+    tk = _skey('rtok', ak)
+    with db(True) as (conn, cur):       # cheap check first, so a bad token never costs a slow password hash
+        if not _token_ok(cur, tk, token):
+            return fail(expired)
+    new_hash = hash_password(password)
     with db(True) as (conn, cur):
+        if not _token_ok(cur, tk, token, lock=True):      # checked again under a lock: a token works only once
+            return fail(expired)
         if acct['table'] == 'staff':     # choosing their own password also ends the "temporary password" state
             cur.execute('UPDATE staff SET password = %s, must_change_password = 0 WHERE id = %s',
-                        (hash_password(password), acct['id']))
+                        (new_hash, acct['id']))
         else:
-            cur.execute('UPDATE users SET password_hash = %s WHERE id = %s',
-                        (hash_password(password), acct['id']))
+            cur.execute('UPDATE users SET password_hash = %s WHERE id = %s', (new_hash, acct['id']))
+        cur.execute('DELETE FROM auth_state WHERE k IN (%s, %s)', (tk, _skey('rotp', ak)))
         conn.commit()
-    _reset_tokens.pop(k, None)
-    _reset_otps.pop(k, None)
     if acct.get('email'):
         send_email_async(acct['email'], 'CampusFix - Your password was changed',
                          f"Hello {acct.get('name') or 'there'},\n\n"
@@ -1018,14 +1167,14 @@ def signup():
         return err('Please enter a valid email address.', 400)
     if len(password) < 6 or len(password) > 128:
         return err('Password must be 6 to 128 characters.', 400)
-    if REQUIRE_EMAIL_OTP and _verified.get(email, 0) < time.time():
-        return err('Please verify your email with the OTP first.', 403)
-
-    pw_hash = hash_password(password)       # slow (~100 ms): done before a database connection is taken
-    with db(True) as (conn, cur):
+    with db(True) as (conn, cur):       # cheap checks first, so a bad request never costs a slow password hash
+        if REQUIRE_EMAIL_OTP and not state_alive(cur, _skey('ver', email)):
+            return err('Please verify your email with the OTP first.', 403)
         cur.execute('SELECT id FROM users WHERE roll_number = %s OR email = %s LIMIT 1', (roll, email))
         if cur.fetchone():
             return err('An account with this roll number or email already exists.', 409)
+    pw_hash = hash_password(password)       # slow (~100 ms): done while no database connection is held
+    with db(True) as (conn, cur):
         try:
             cur.execute("""INSERT INTO users (name, email, password_hash, role, roll_number, course_year)
                            VALUES (%s, %s, %s, 'student', %s, %s)""",
@@ -1034,7 +1183,7 @@ def signup():
         except mysql_errors.IntegrityError:     # two signups at the same moment: the unique keys stop the second
             conn.rollback()
             return err('An account with this roll number or email already exists.', 409)
-    _verified.pop(email, None)
+        state_del(conn, cur, _skey('ver', email))      # the "email verified" ticket is used up
     return ok('Account created', redirect=url_for('index')) if as_json else redirect(url_for('index'))
 
 
@@ -1045,18 +1194,24 @@ def _upgrade_hash(table, column, row_id, password):
         conn.commit()
 
 
+def _find_staff(cur, lid):
+    if not EMAIL_RE.match(lid):
+        return None
+    cur.execute('SELECT id, name, dept, password FROM staff WHERE email = %s AND active = 1 LIMIT 1', (lid,))
+    return cur.fetchone()
+
+
 def authenticate(login_id, password):
     """One login for everyone. Students/admins are looked up by roll number or email in `users`,
     staff by email in `staff`.  -> (kind, row, error)  kind: 'student' | 'admin' | 'staff'"""
     lid = login_id.lower()
+    staff = None
     with db(True) as (conn, cur):
         cur.execute('SELECT id, name, email, password_hash, role FROM users '
                     'WHERE roll_number = %s OR email = %s LIMIT 1', (login_id, lid))
         user = cur.fetchone()
-        staff = None
-        if EMAIL_RE.match(lid):
-            cur.execute('SELECT id, name, dept, password FROM staff WHERE email = %s AND active = 1 LIMIT 1', (lid,))
-            staff = cur.fetchone()
+        if not user:                    # the common case (a student) needs just this one database visit
+            staff = _find_staff(cur, lid)
     # The slow password check runs after the connection went back to the pool.
     if user:
         valid, upgrade = verify_password(user['password_hash'], password)
@@ -1067,6 +1222,8 @@ def authenticate(login_id, password):
             if not role:
                 return None, None, ('Your account has no valid role. Please contact the administrator.', 403)
             return role, user, None
+        with db(True) as (conn, cur):   # wrong password: the same email might still be a staff account
+            staff = _find_staff(cur, lid)
     if staff:
         valid, upgrade = verify_password(staff['password'], password)
         if valid:
@@ -1088,7 +1245,7 @@ def login():
 
     if not login_id or not password:
         return err('Please enter your login ID and password.', 400)
-    key = f'{request.remote_addr}|{login_id.lower()}'
+    key = f'{client_ip()}|{login_id.lower()}'
     if login_locked(key):
         return err('Too many failed attempts. Please try again in a few minutes.', 429)
 
@@ -1096,7 +1253,9 @@ def login():
     if error:
         if error[1] == 401:
             login_failed(key)
-            app.logger.warning('Failed login from IP %s', request.remote_addr)   # lets you check the proxy setup in the logs
+            app.logger.warning('Failed login from IP %s (socket=%s, xff=%s, cf=%s)', client_ip(),
+                               _socket_ip(), request.headers.get('X-Forwarded-For'),
+                               request.headers.get('CF-Connecting-IP'))   # temporary: shows which header carries the real IP
         return err(*error)
 
     session.clear()

@@ -204,6 +204,27 @@ TABLES = [
             REFERENCES complaints(id) ON DELETE CASCADE
     ) {TABLE_OPTS}
     """,
+    # OTPs, "email verified" tickets and reset tokens (only keyed hashes, never the raw code)
+    f"""
+    CREATE TABLE IF NOT EXISTS auth_state (
+        k VARCHAR(80) NOT NULL PRIMARY KEY,
+        kind VARCHAR(12) NOT NULL,
+        code VARCHAR(80) NOT NULL DEFAULT '',
+        tries INT NOT NULL DEFAULT 0,
+        sent BIGINT NOT NULL DEFAULT 0,
+        exp BIGINT NOT NULL,
+        KEY idx_auth_exp (exp)
+    ) {TABLE_OPTS}
+    """,
+    # shared counters: OTP requests per email, emails sent today
+    f"""
+    CREATE TABLE IF NOT EXISTS counters (
+        k VARCHAR(80) NOT NULL PRIMARY KEY,
+        n INT NOT NULL DEFAULT 0,
+        exp BIGINT NOT NULL,
+        KEY idx_counters_exp (exp)
+    ) {TABLE_OPTS}
+    """,
 ]
 
 # For databases that already exist: CREATE TABLE IF NOT EXISTS will not touch
