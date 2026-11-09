@@ -31,3 +31,8 @@ That only helps on an instance with 1+ CPU; on a small instance extra workers ju
 
 Still per worker (not shared): per-IP rate limits and login lock-outs (with N workers the real limit is N x the
 number shown in the code) and the password-hash gate (`MAX_PARALLEL_HASH`).
+
+## Testing
+`tests/TEST_PLAN.md` has the full test plan and the latest report.
+* `python tests/smoke_live.py --base <url> --student-id <test roll> --student-pass <pw>` - 40+ automatic checks on the live site.
+* `python tests/loadtest.py --base <url> --login-id <test roll> --password <pw> --users 20 --duration 30` - load test (nothing to install).

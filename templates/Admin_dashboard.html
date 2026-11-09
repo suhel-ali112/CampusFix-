@@ -65,6 +65,8 @@
   .np-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);}
   .np-head b{font-family:var(--ff-head);font-size:15px;font-weight:800;}
   .np-head button{border:none;background:none;color:var(--brand);font-weight:700;font-size:12px;}
+  .np-acts{display:flex;align-items:center;gap:14px;}
+  .np-head button.np-clear{color:var(--err);}
   .np-list{overflow-y:auto;padding:6px;}
   .ni{display:flex;gap:11px;width:100%;text-align:left;border:none;background:transparent;padding:11px 10px;border-radius:14px;align-items:flex-start;}
   .ni:hover{background:var(--chip);}
@@ -445,7 +447,7 @@
   <span class="bell-wrap"><button class="icon-btn bell" id="bellBtn" aria-label="Notifications"><svg class="ic" viewBox="0 0 24 24"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></button><span class="nbadge" id="nBadge">0</span></span>
 </header>
 <div class="notif-panel" id="notifPanel" role="dialog" aria-label="Notifications">
-  <div class="np-head"><b>Notifications</b><button id="nReadAll">Mark all read</button></div>
+  <div class="np-head"><b>Notifications</b><div class="np-acts"><button id="nReadAll">Mark all read</button><button id="nClear" class="np-clear">Clear all</button></div></div>
   <div class="np-list" id="nList"></div>
 </div>
 
@@ -661,7 +663,7 @@
   if(!hod.role || /head of/i.test(hod.role) || hod.role==='HOD') hod.role='Admin';
   document.documentElement.dataset.theme = get(K.theme,'light');
 
-  function initials(n){ return (n||'H').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase() || 'H'; }
+  function initials(n){ return (n||'H').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').replace(/[^\p{L}\p{N}]/gu,'').toUpperCase() || 'H'; }
   function avatarHTML(p,n){ return p ? `<img src="${p}" alt="">` : initials(n); }
   function renderHod(){
     $('dAv').innerHTML = avatarHTML(hod.photo,hod.name); $('pAv').innerHTML = avatarHTML(hod.photo,hod.name);
@@ -1404,14 +1406,23 @@
   //   POST /api/hod/complaints/<id>/resolve {photo, report}                 DELETE /api/hod/complaints/<id>
   //   GET/POST /api/hod/staff               POST/DELETE /api/hod/staff/<id>   POST /api/hod/staff/<id>/reset-password
   //   GET /api/hod/profile                  POST /api/hod/update-profile      POST /api/update-photo
-  // Only the theme (campusfix_theme) and the notification read-list (cf_notif_read) stay in this browser.
+  // Only the theme (campusfix_theme) and the notification lists (cf_notif_read, cf_notif_clear) stay in this browser.
 
   // ============ NOTIFICATIONS ============
+  // The admin notifications are NOT stored on the server. They are worked out in this browser from the
+  // complaint list (allNotifs). Two small lists in localStorage remember what the admin did with them:
+  //   cf_notif_read  = keys of notifications already read   (they stay in the list, just not highlighted)
+  //   cf_notif_clear = keys of notifications cleared        (they are hidden from the list)
+  // A key looks like  new:CF-26-0012  /  od:CF-26-0012  /  pri:CF-26-0012:urgent  /  res:CF-26-0012:<time>,
+  // so a new event on the same complaint (for example overdue after 72 h) makes a new notification.
   var nOpen=false;
-  function loadNR(){ try{ return JSON.parse(localStorage.getItem('cf_notif_read'))||[]; }catch(e){ return []; } }
-  function saveNR(a){ try{ localStorage.setItem('cf_notif_read',JSON.stringify(a.slice(-400))); }catch(e){} }
+  function loadList(k){ try{ const v=JSON.parse(localStorage.getItem(k)); return Array.isArray(v)?v:[]; }catch(e){ return []; } }
+  function saveList(k,a){ try{ localStorage.setItem(k,JSON.stringify(a)); }catch(e){} }
+  const loadNR=()=>loadList('cf_notif_read'),  saveNR=a=>saveList('cf_notif_read',a);
+  const loadNC=()=>loadList('cf_notif_clear'), saveNC=a=>saveList('cf_notif_clear',a);
   function relT(ts){ const m=Math.max(0,Math.round((Date.now()-ts)/60000)); if(m<1) return 'Just now'; if(m<60) return m+'m ago'; const h=Math.round(m/60); if(h<24) return h+'h ago'; return Math.round(h/24)+'d ago'; }
-  function buildNotifs(){
+  // every notification that exists right now (nothing hidden, nothing cut off)
+  function allNotifs(){
     const now=Date.now(), out=[], W=7*864e5;
     loadC().forEach(c=>{
       if(c.status==='resolved'){ if(c.resolvedAt&&now-c.resolvedAt<W) out.push({k:'res:'+c.id+':'+c.resolvedAt,t:'ok',id:c.id,ts:c.resolvedAt,title:'Complaint resolved',msg:c.title}); return; }
@@ -1419,15 +1430,17 @@
       if(isOverdue(c)) out.push({k:'od:'+c.id,t:'od',id:c.id,ts:c.createdAt+SLA_H*36e5,title:'Overdue — open for over '+SLA_H+'h',msg:c.title});
       if(pri(c)==='urgent'||pri(c)==='high'){ const pl=(c.log||[]).filter(l=>/^Priority/.test(l.msg)).pop(); out.push({k:'pri:'+c.id+':'+pri(c),t:'pri',id:c.id,ts:pl?pl.t:c.createdAt,title:PRI[pri(c)]+' priority — still open',msg:c.title}); }
     });
-    return out.sort((a,b)=>b.ts-a.ts).slice(0,40);
+    return out.sort((a,b)=>b.ts-a.ts);
   }
+  // what the panel shows: not cleared, newest 40
+  function buildNotifs(){ const gone=new Set(loadNC()); return allNotifs().filter(n=>!gone.has(n.k)).slice(0,40); }
   function nIcon(t){ const P={new:'<path d="M12 5v14M5 12h14"/>',od:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',pri:'<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>',ok:'<path d="M5 13l4 4L19 7"/>'}; return `<svg class="ic" viewBox="0 0 24 24">${P[t]}</svg>`; }
   function renderNotifList(){
-    const rd=loadNR(), L=buildNotifs();
-    $('nList').innerHTML=L.length?L.map(n=>`<button class="ni ${rd.includes(n.k)?'':'unread'}" data-k="${esc(n.k)}" data-id="${esc(n.id)}"><span class="nic ${n.t}">${nIcon(n.t)}</span><span class="nt"><b>${esc(n.title)}</b><span>${esc(n.msg)}</span><small>${relT(n.ts)}</small></span></button>`).join(''):'<div class="n-empty">You are all caught up</div>';
+    const rd=new Set(loadNR()), L=buildNotifs();
+    $('nList').innerHTML=L.length?L.map(n=>`<button class="ni ${rd.has(n.k)?'':'unread'}" data-k="${esc(n.k)}" data-id="${esc(n.id)}"><span class="nic ${n.t}">${nIcon(n.t)}</span><span class="nt"><b>${esc(n.title)}</b><span>${esc(n.msg)}</span><small>${relT(n.ts)}</small></span></button>`).join(''):'<div class="n-empty">You are all caught up</div>';
   }
   function renderNotifBadge(){
-    const rd=loadNR(), n=buildNotifs().filter(x=>!rd.includes(x.k)).length, b=$('nBadge');
+    const rd=new Set(loadNR()), n=buildNotifs().filter(x=>!rd.has(x.k)).length, b=$('nBadge');
     b.textContent=n>99?'99+':n; b.style.display=n?'flex':'none'; $('bellBtn').classList.toggle('ring',n>0);
     if(nOpen) renderNotifList();
   }
@@ -1439,7 +1452,18 @@
     const rd=loadNR(); if(!rd.includes(it.dataset.k)){ rd.push(it.dataset.k); saveNR(rd); }
     setNotif(false); renderNotifBadge(); openDetail(it.dataset.id);
   });
-  $('nReadAll').addEventListener('click',()=>{ saveNR(loadNR().concat(buildNotifs().map(n=>n.k))); renderNotifBadge(); renderNotifList(); });
+  // Mark all read: the list stays, only the red dots and the badge go. Keys of notifications that no longer exist are dropped.
+  $('nReadAll').addEventListener('click',()=>{
+    saveNR(allNotifs().map(n=>n.k));
+    renderNotifBadge(); renderNotifList();
+  });
+  // Clear all: the notifications are hidden. Keys of notifications that no longer exist are dropped, so the list cannot grow.
+  $('nClear').addEventListener('click',()=>{
+    const all=allNotifs();
+    if(!buildNotifs().length){ toast('Nothing to clear'); return; }
+    saveNC(all.map(n=>n.k));
+    renderNotifBadge(); renderNotifList(); toast('Notifications cleared');
+  });
   document.addEventListener('click',()=>{ if(nOpen) setNotif(false); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&nOpen) setNotif(false); });
   setInterval(renderNotifBadge,60000);

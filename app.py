@@ -234,6 +234,8 @@ _hash_gate = threading.BoundedSemaphore(int(os.environ.get('MAX_PARALLEL_HASH', 
 _werkzeug_hash = generate_password_hash
 PW_HASH_METHOD = os.environ.get('PW_HASH_METHOD', 'scrypt')
 
+_login_slots = threading.BoundedSemaphore(int(os.environ.get('MAX_LOGINS_INFLIGHT', '4')))
+
 
 def hash_password(pw):
     with _hash_gate:
@@ -256,6 +258,12 @@ _PW_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
 
 def gen_password(n=10):
     return ''.join(secrets.choice(_PW_CHARS) for _ in range(n))
+
+
+def json_body():
+    """The JSON body as a dict. Anything else (a list, a number, nothing) counts as empty - never a crash."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
 
 
 # ---------- real visitor IP ----------
@@ -976,7 +984,7 @@ def mail_budget(conn, cur, status=False):
 # ---------- OTP ----------
 @app.route('/send-otp', methods=['POST'])
 def send_otp():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     email = norm_email(data.get('email'))
     if not EMAIL_RE.match(email):
         return fail('A valid email is required')
@@ -1011,7 +1019,7 @@ def send_otp():
 
 @app.route('/verify-otp', methods=['POST'])
 def verify_otp():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     email = norm_email(data.get('email'))
     entered = clean(data.get('otp'), 10)
     with db(True) as (conn, cur):
@@ -1054,7 +1062,7 @@ def _acct_key(acct):
 
 @app.route('/api/forgot/send-otp', methods=['POST'])
 def forgot_send_otp():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     ident = clean(data.get('id'), 120)
     if not ident:
         return fail('Enter your Gmail or roll number')
@@ -1088,7 +1096,7 @@ def forgot_send_otp():
 
 @app.route('/api/forgot/verify-otp', methods=['POST'])
 def forgot_verify_otp():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     entered = clean(data.get('otp'), 10)
     if too_many(f'fp-verify-ip:{client_ip()}', 200, 3600):
         return fail('Too many attempts. Please try again later.', 429)
@@ -1113,7 +1121,7 @@ def forgot_verify_otp():
 
 @app.route('/api/forgot/reset', methods=['POST'])
 def forgot_reset():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     token = clean(data.get('token'), 100)
     password = data.get('password') or ''
     if len(password) < 6 or len(password) > 128:
@@ -1150,7 +1158,7 @@ def forgot_reset():
 @app.route('/signup', methods=['POST'])
 def signup():
     as_json = request.is_json
-    f = (request.get_json(silent=True) or {}) if as_json else request.form
+    f = (json_body()) if as_json else request.form
 
     def err(msg, code):
         return fail(msg, code) if as_json else (msg, code)
@@ -1236,7 +1244,7 @@ def authenticate(login_id, password):
 @app.route('/login', methods=['POST'])
 def login():
     as_json = request.is_json            # the login page sends JSON; a plain form POST still works
-    data = (request.get_json(silent=True) if as_json else request.form) or {}
+    data = (json_body() if as_json else request.form) or {}
     login_id = clean(data.get('login_id') or data.get('email'), 120)
     password = data.get('password') or ''
 
@@ -1249,7 +1257,14 @@ def login():
     if login_locked(key):
         return err('Too many failed attempts. Please try again in a few minutes.', 429)
 
-    kind, row, error = authenticate(login_id, password)
+    # Load shedding: checking a password costs ~90 ms of CPU. If a rush of logins fills every thread, people who
+    # are already logged in would stall too. So only a few logins run at once; the rest are told to retry at once.
+    if not _login_slots.acquire(blocking=False):
+        return err('The server is busy right now. Please try again in a few seconds.', 503)
+    try:
+        kind, row, error = authenticate(login_id, password)
+    finally:
+        _login_slots.release()
     if error:
         if error[1] == 401:
             login_failed(key)
@@ -1282,7 +1297,7 @@ def staff_login():
 @app.route('/api/complaints', methods=['POST'])
 @require_role('student')
 def api_add_complaint():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     title = clean(data.get('title'), 200)
     description = clean(data.get('details') or data.get('description'), 3000)
     location = clean(data.get('address') or data.get('location') or 'Campus', 255)
@@ -1395,7 +1410,7 @@ def api_reopen_complaint(cid):
 @app.route('/api/complaints/<string:cid>/rating', methods=['POST'])
 @require_role('student')
 def api_rate_complaint(cid):
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     try:
         rating = int(data.get('rating'))
     except (TypeError, ValueError):
@@ -1444,7 +1459,7 @@ def api_get_user():
 @app.route('/api/update-profile', methods=['POST'])
 @require_role('student')
 def update_profile():
-    data = request.get_json(silent=True) or request.form
+    data = json_body() or request.form
     name = clean(data.get('name'), 100)
     roll = clean(data.get('roll'), 50)
     course_year = f"{clean(data.get('course'), 60)} {clean(data.get('year'), 30)}".strip()
@@ -1475,7 +1490,7 @@ def update_profile():
 @app.route('/api/update-photo', methods=['POST'])
 @require_role('student', 'admin')
 def update_photo():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     photo = data.get('photo')
     value = None
     if photo:
@@ -1492,7 +1507,7 @@ def update_photo():
 @app.route('/api/change-password', methods=['POST'])
 @require_role('student', 'admin')
 def api_change_password():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     old, new = data.get('old') or '', data.get('new') or ''
     key = f"userpw:{session['user_id']}"
     if login_locked(key):
@@ -1534,7 +1549,7 @@ def api_notifications():
 @app.route('/api/notifications/read', methods=['POST'])
 @require_role('student')
 def api_notifications_read():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     with db() as (conn, cur):
         if data.get('all'):
             cur.execute('UPDATE user_notifications SET is_read = 1 WHERE user_id = %s', (session['user_id'],))
@@ -1633,7 +1648,7 @@ def api_hod_update_complaint(cid):
     num = parse_cid(cid)
     if num is None:
         return fail('Invalid complaint ID')
-    data = request.get_json(silent=True) or {}
+    data = json_body()
 
     sets, params, logs = [], [], []
     notes, mail = [], None
@@ -1725,7 +1740,7 @@ def api_hod_resolve_complaint(cid):
         raw_photo = base64.b64decode(photo_url.split(',', 1)[1])
         report = clean(request.form.get('report'), 3000)
     else:
-        data = request.get_json(silent=True) or {}
+        data = json_body()
         given = data.get('photo') or data.get('fix_photo')
         if given:
             chk = check_data_url(given, MAX_COMPLAINT_PHOTO)
@@ -1803,7 +1818,7 @@ def api_hod_get_profile():
 @app.route('/api/hod/update-profile', methods=['POST'])
 @require_role('admin')
 def update_hod_profile():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     name = clean(data.get('name'), 100)
     email = norm_email(data.get('email'))
     phone = clean(data.get('phone'), 15)
@@ -1896,7 +1911,7 @@ def email_staff_password(name, email, password, created):
 @app.route('/api/hod/staff', methods=['POST'])
 @require_role('admin')
 def api_hod_staff_create():
-    vals, err = _validate_staff(request.get_json(silent=True) or {})
+    vals, err = _validate_staff(json_body())
     if err:
         return fail(err)
     password = gen_password()
@@ -1927,7 +1942,7 @@ def api_hod_staff_create():
 @app.route('/api/hod/staff/<int:sid>', methods=['PATCH', 'POST'])
 @require_role('admin')
 def api_hod_staff_update(sid):
-    vals, err = _validate_staff(request.get_json(silent=True) or {}, partial=True)
+    vals, err = _validate_staff(json_body(), partial=True)
     if err:
         return fail(err)
     if not vals:
@@ -2033,7 +2048,7 @@ def api_staff_action(cid, action):
     num = parse_cid(cid)
     if num is None or action not in STAFF_ACTIONS:
         return fail('Invalid request')
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     note = clean(data.get('note'), 3000)
     sid, sname = g.staff['id'], g.staff['name']
     mail = None
@@ -2114,7 +2129,7 @@ def api_staff_action(cid, action):
 @app.route('/api/staff/update-profile', methods=['POST'])
 @staff_required()
 def api_staff_update_profile():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     name = clean(data.get('name'), 100)
     phone = clean(data.get('phone'), 15)
     if len(name) < 2:
@@ -2131,7 +2146,7 @@ def api_staff_update_profile():
 @app.route('/api/staff/update-photo', methods=['POST'])
 @staff_required()
 def api_staff_update_photo():
-    photo = (request.get_json(silent=True) or {}).get('photo')
+    photo = (json_body()).get('photo')
     value = None
     if photo:
         chk = check_data_url(photo, MAX_PROFILE_PHOTO)
@@ -2147,7 +2162,7 @@ def api_staff_update_photo():
 @app.route('/api/staff/change-password', methods=['POST'])
 @staff_required()
 def api_staff_change_password():
-    data = request.get_json(silent=True) or {}
+    data = json_body()
     old, new = data.get('old') or '', data.get('new') or ''
     key = f"staffpw:{g.staff['id']}"
     if login_locked(key):

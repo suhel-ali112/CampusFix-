@@ -1176,12 +1176,18 @@ async function sendOtpToGmail(gmail){
       if (!password) { err.textContent = 'Enter your password.'; shakeEl(pwInp); return; }
       btn.classList.add('loading'); btn.disabled = true;
       try {
-        const res = await fetch('/login', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ login_id, password })
-        });
-        let d = {}; try { d = await res.json(); } catch (_) {}
+        let res, d = {};
+        for (let attempt = 0; attempt < 4; attempt++) {
+          res = await fetch('/login', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login_id, password })
+          });
+          d = {}; try { d = await res.json(); } catch (_) {}
+          if (res.status !== 503) break;          // server busy (login rush): wait a moment, then try again by itself
+          err.textContent = 'The server is busy - trying again...';
+          await new Promise(r => setTimeout(r, 1500 + Math.random() * 2000));
+        }
         if (res.ok && d.success) { window.location.replace(d.redirect || '/'); return; }   // replace: the login page must not stay in the Back history
         err.textContent = d.message || 'Login failed. Please try again.';
       } catch (_) {

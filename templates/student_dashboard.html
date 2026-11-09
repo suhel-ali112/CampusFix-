@@ -849,7 +849,7 @@
 
   document.documentElement.dataset.theme = get(K.t, document.documentElement.dataset.theme||'light');
 
-  function initials(n){ return (n||'S').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase() || 'S'; }
+  function initials(n){ return (n||'S').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').replace(/[^\p{L}\p{N}]/gu,'').toUpperCase() || 'S'; }
   function avatarHTML(){ return user.photo ? `<img src="${user.photo}" alt="">` : initials(user.name); }
   function courseLine(){ return [user.course, user.year].filter(Boolean).join(' · ') || 'Add your course in profile'; }
   function residence(){ return user.hostel === 'Hostel' ? ('Hostel' + (user.room ? ' · ' + user.room : '')) : 'Day Scholar'; }
